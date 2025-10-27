@@ -4,6 +4,7 @@
 
 #include "trap.h"
 #include "uart.h"
+#include "clint.h"
 
 // CSR read helpers
 static inline unsigned long read_scause(void) {
@@ -86,16 +87,13 @@ static void handle_exception(struct trap_frame *tf, unsigned long cause) {
 }
 
 // Handle interrupts (asynchronous traps)
-static void handle_interrupt(struct trap_frame *tf, unsigned long cause) {
+static void handle_interrupt(struct trap_frame *tf __attribute__((unused)), unsigned long cause) {
     cause &= ~INTERRUPT_BIT; // Remove interrupt bit
-    
-    uart_puts("Interrupt: ");
-    print_hex(cause);
-    uart_puts("\n");
     
     switch (cause) {
         case IRQ_S_TIMER:
-            uart_puts("Timer interrupt\n");
+            // Handle timer interrupt
+            clint_handle_timer();
             break;
         case IRQ_S_SOFT:
             uart_puts("Software interrupt\n");
@@ -104,7 +102,9 @@ static void handle_interrupt(struct trap_frame *tf, unsigned long cause) {
             uart_puts("External interrupt\n");
             break;
         default:
-            uart_puts("Unknown interrupt\n");
+            uart_puts("Unknown interrupt: ");
+            print_hex(cause);
+            uart_puts("\n");
             break;
     }
 }

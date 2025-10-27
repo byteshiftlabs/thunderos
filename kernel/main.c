@@ -4,6 +4,7 @@
 
 #include "uart.h"
 #include "trap.h"
+#include "clint.h"
 
 void kernel_main(void) {
     // Initialize UART for serial output
@@ -23,13 +24,17 @@ void kernel_main(void) {
     trap_init();
     uart_puts("[OK] Trap handler initialized\n");
     
+    // Initialize timer interrupts
+    clint_init();
+    uart_puts("[OK] Timer interrupts enabled\n");
+    
     uart_puts("[  ] Memory management: TODO\n");
     uart_puts("[  ] Process scheduler: TODO\n");
     uart_puts("[  ] AI accelerators: TODO\n");
     
-    uart_puts("\nThunderOS kernel idle.\n");
+    uart_puts("\nThunderOS kernel idle. Waiting for timer interrupts...\n");
     
-    // Halt CPU
+    // Halt CPU (will wake on interrupts)
     while (1) {
         __asm__ volatile("wfi");
     }
