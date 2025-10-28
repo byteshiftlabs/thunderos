@@ -4,11 +4,7 @@
 
 #include "trap.h"
 #include "hal/hal_uart.h"
-<<<<<<< HEAD:kernel/arch/riscv64/trap.c
-#include "clint.h"
-=======
 #include "hal/hal_timer.h"
->>>>>>> origin/main:kernel/arch/riscv64/core/trap.c
 
 // CSR read helpers
 static inline unsigned long read_scause(void) {
