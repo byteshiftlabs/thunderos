@@ -48,6 +48,8 @@ void *kmalloc(size_t size) {
     }
     
     // Set up allocation header
+    // NOTE: Direct cast assumes identity mapping (VA == PA).
+    // Will need VA mapping when paging is enabled.
     struct kmalloc_header *header = (struct kmalloc_header *)page_addr;
     header->size = size;
     header->pages = pages_needed;
@@ -66,6 +68,8 @@ void kfree(void *ptr) {
     }
     
     // Get header
+    // NOTE: This assumes identity mapping (VA == PA) which is true in early boot.
+    // When virtual memory is implemented, this will need to use proper VA->PA translation.
     struct kmalloc_header *header = (struct kmalloc_header *)((uintptr_t)ptr - HEADER_SIZE);
     
     // Validate magic number
