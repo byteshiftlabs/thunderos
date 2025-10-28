@@ -13,6 +13,7 @@ This section documents the internal implementation details of ThunderOS.
    hal_timer
    pmm
    kmalloc
+   paging
    kstring
    testing_framework
    linker_script
@@ -62,15 +63,18 @@ Component Status
    * - :doc:`kstring`
      - ✓ Done
      - Kernel string utilities (kprint_dec, kprint_hex)
+   * - :doc:`paging`
+     - ✓ Done
+     - Virtual memory with Sv39 paging (identity mapping)
    * - :doc:`testing_framework`
      - ✓ Done
      - KUnit-inspired testing framework for kernel
    * - :doc:`linker_script`
      - ✓ Done
      - Memory layout and section placement
-   * - Virtual Memory
+   * - Higher-Half Kernel
      - TODO
-     - Paging, TLB management, VA→PA translation
+     - Move kernel to 0xFFFFFFFF80000000
    * - Process Scheduler
      - TODO
      - Task structures, context switching
@@ -103,7 +107,8 @@ Source Files
    │   └── kstring.c       # String utilities
    └── mm/
        ├── pmm.c           # Physical memory manager
-       └── kmalloc.c       # Kernel heap allocator
+       ├── kmalloc.c       # Kernel heap allocator
+       └── paging.c        # Virtual memory management
 
    include/
    ├── trap.h              # Trap structures and constants
@@ -114,7 +119,8 @@ Source Files
    │   └── kstring.h       # String utilities interface
    └── mm/
        ├── pmm.h           # PMM interface
-       └── kmalloc.h       # kmalloc interface
+       ├── kmalloc.h       # kmalloc interface
+       └── paging.h        # Paging interface
    
    tests/
    ├── framework/
