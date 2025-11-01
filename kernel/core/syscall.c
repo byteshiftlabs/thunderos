@@ -46,7 +46,8 @@ static int is_valid_user_pointer(const void *pointer, size_t length) {
     }
     
     // Check for address overflow
-    if (address + length < address) {
+    uintptr_t end_address = address + length;
+    if (end_address < address) {
         return 0;
     }
     
