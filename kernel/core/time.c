@@ -21,7 +21,8 @@ void udelay(uint64_t us) {
     
     // Wait until we reach the target time
     while (ktime_read() < target) {
-        // Busy wait
+        // Use WFI to reduce power consumption while waiting
+        __asm__ volatile("wfi");
     }
 }
 
