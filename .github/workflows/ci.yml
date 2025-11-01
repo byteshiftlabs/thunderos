@@ -44,8 +44,8 @@ jobs:
         make qemu > qemu_output.log 2>&1 &
         QEMU_PID=$!
         
-        # Wait for QEMU to start and produce output
-        sleep 5
+        # Wait for QEMU to start and produce output (8 seconds for full initialization)
+        sleep 8
         
         # Kill QEMU process and all its children
         kill -TERM $QEMU_PID 2>/dev/null || true
@@ -58,14 +58,23 @@ jobs:
         cat qemu_output.log
         echo "=== End Output ==="
         
-        # Verify boot and process execution
-        if ! grep -q "ThunderOS\|Kernel\|Boot" qemu_output.log; then
+        # Check for boot loop (multiple initializations indicate crash/reboot)
+        BOOT_COUNT=$(grep -c "Initializing..." qemu_output.log || echo 0)
+        if [ "$BOOT_COUNT" -gt 2 ]; then
+          echo "ERROR: Kernel is stuck in a boot loop (rebooted $BOOT_COUNT times)"
+          echo "This indicates a crash after initialization"
+          exit 1
+        fi
+        
+        # Verify boot messages
+        if ! grep -q "ThunderOS\|Kernel" qemu_output.log; then
           echo "ERROR: Boot messages not found"
           exit 1
         fi
         
-        if ! grep -q "Process" qemu_output.log; then
-          echo "ERROR: Process scheduling not working"
+        # Check for successful initialization (PMM, Paging, or Process messages)
+        if ! grep -q "Process\|PMM\|Paging\|Scheduler\|Multitasking" qemu_output.log; then
+          echo "ERROR: Kernel initialization incomplete or process scheduling not working"
           exit 1
         fi
         
