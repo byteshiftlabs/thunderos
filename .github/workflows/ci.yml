@@ -59,7 +59,7 @@ jobs:
         echo "=== End Output ==="
         
         # Check for boot loop (multiple initializations indicate crash/reboot)
-        BOOT_COUNT=$(grep -c "Initializing..." qemu_output.log || echo 0)
+        BOOT_COUNT=$(grep -c "^Initializing\.\.\.$" qemu_output.log || echo 0)
         if [ "$BOOT_COUNT" -gt 2 ]; then
           echo "ERROR: Kernel is stuck in a boot loop (rebooted $BOOT_COUNT times)"
           echo "This indicates a crash after initialization"
