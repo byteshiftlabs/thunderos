@@ -1,4 +1,3 @@
-````markdown
 # ThunderOS
 
 A RISC-V operating system focused on AI acceleration and educational use.
@@ -66,7 +65,6 @@ See [docs/source/development/code_quality.rst](docs/source/development/code_qual
 ## Platform Support
 
 - **QEMU virt machine**: Tested and working ✓
-- **Real RISC-V hardware**: Planned for v0.9+
 
 ## Dependencies
 
@@ -78,4 +76,3 @@ See [docs/source/development/code_quality.rst](docs/source/development/code_qual
 ## License
 
 See [LICENSE](LICENSE) file for details.
-````
