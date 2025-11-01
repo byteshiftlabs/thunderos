@@ -246,7 +246,8 @@ struct process *process_create(const char *name, void (*entry_point)(void *), vo
     // Set return address to wrapper function
     proc->context.ra = (unsigned long)process_wrapper;
     // Set stack pointer to top of kernel stack (grows downward)
-    proc->context.sp = proc->kernel_stack + KERNEL_STACK_SIZE - 16;
+    // Subtract STACK_ALIGNMENT to ensure 16-byte alignment per RISC-V ABI
+    proc->context.sp = proc->kernel_stack + KERNEL_STACK_SIZE - STACK_ALIGNMENT;
     
     // Initialize other fields
     proc->cpu_time = 0;
@@ -312,6 +313,7 @@ void process_sleep(uint64_t ticks) {
     lock_acquire(&process_lock);
     proc->state = PROC_SLEEPING;
     // TODO: Add to sleep queue with wakeup time
+    (void)ticks;  // Unused until timer queue is implemented
     lock_release(&process_lock);
     
     process_yield();

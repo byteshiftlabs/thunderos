@@ -38,6 +38,9 @@ typedef int32_t pid_t;
 // Kernel stack size (16KB)
 #define KERNEL_STACK_SIZE (16 * 1024)
 
+// RISC-V ABI requires 16-byte stack alignment
+#define STACK_ALIGNMENT 16
+
 // Process context - saved during context switch
 struct context {
     unsigned long ra;   // Return address
