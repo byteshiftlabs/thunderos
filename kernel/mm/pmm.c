@@ -162,15 +162,19 @@ uintptr_t pmm_alloc_pages(size_t num_pages) {
     // Could not find contiguous pages
     hal_uart_puts("PMM: Could not allocate ");
     // Print num_pages
-    char buf[20];
-    int idx = 0;
-    size_t n = num_pages;
-    while (n > 0) {
-        buf[idx++] = '0' + (n % 10);
-        n /= 10;
-    }
-    while (idx > 0) {
-        hal_uart_putc(buf[--idx]);
+    if (num_pages == 0) {
+        hal_uart_putc('0');
+    } else {
+        char buf[20];
+        int idx = 0;
+        size_t n = num_pages;
+        while (n > 0) {
+            buf[idx++] = '0' + (n % 10);
+            n /= 10;
+        }
+        while (idx > 0) {
+            hal_uart_putc(buf[--idx]);
+        }
     }
     hal_uart_puts(" contiguous pages\n");
     return 0;
