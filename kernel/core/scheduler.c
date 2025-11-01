@@ -6,6 +6,7 @@
 
 #include "kernel/scheduler.h"
 #include "kernel/process.h"
+#include "kernel/config.h"
 #include "hal/hal_uart.h"
 #include "arch/interrupt.h"
 
@@ -20,9 +21,10 @@ static int queue_count = 0;
 static volatile int sched_lock = 0;
 
 // Time slice for round-robin scheduling
-// Units: timer ticks (1 tick = 100ms timer interval)
-// TIME_SLICE = 10 ticks = 10 * 100ms = 1000ms = 1 second per process
-#define TIME_SLICE 10
+// Calculated based on TIMER_INTERVAL_US from config.h
+// Desired time slice: 1 second = 1,000,000 microseconds
+// TIME_SLICE = 1,000,000 / TIMER_INTERVAL_US ticks
+#define TIME_SLICE (1000000 / TIMER_INTERVAL_US)
 static uint64_t current_time_slice = 0;
 
 // Simple spinlock functions
