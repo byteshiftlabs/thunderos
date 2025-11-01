@@ -18,7 +18,7 @@
  * 
  * This function never returns.
  * 
- * @param fmt Format string (currently only supports plain strings)
+ * @param message Message string (currently only supports plain strings)
  * 
  * Example usage:
  *   if (!critical_resource)
