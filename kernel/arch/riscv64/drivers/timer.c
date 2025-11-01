@@ -118,26 +118,6 @@ void hal_timer_handle_interrupt(void) {
     // Increment tick counter
     ticks++;
     
-    // Print tick (for debugging)
-    hal_uart_puts("Tick: ");
-    
-    // Print the tick count
-    unsigned long t = ticks;
-    if (t == 0) {
-        hal_uart_putc('0');
-    } else {
-        char buf[20];
-        int i = 0;
-        while (t > 0) {
-            buf[i++] = '0' + (t % 10);
-            t /= 10;
-        }
-        while (i > 0) {
-            hal_uart_putc(buf[--i]);
-        }
-    }
-    hal_uart_puts("\n");
-    
     // Schedule next interrupt using the configured interval
     hal_timer_set_next(timer_interval_us);
 }
