@@ -14,9 +14,17 @@
 #include "kernel/scheduler.h"
 #include "kernel/time.h"
 
-// Timer interval: 100ms = 100,000 microseconds
-// Shorter interval for better responsiveness
-#define TIMER_INTERVAL_US 100000
+// Hardware and memory layout constants (QEMU virt machine)
+#define KERNEL_LOAD_ADDRESS 0x80200000  // From linker script
+#define RAM_START_ADDRESS 0x80000000    // Physical RAM base
+#define RAM_END_ADDRESS 0x88000000      // 128MB RAM end
+#define RAM_SIZE_MB 128                 // Total RAM size
+
+// Timer configuration
+#define TIMER_INTERVAL_US 100000        // 100ms = 100,000 microseconds
+
+// Test allocation size
+#define TEST_ALLOC_SIZE 256             // Bytes for kmalloc test
 
 // Linker symbols (defined in kernel.ld)
 extern char _kernel_end[];
@@ -30,10 +38,7 @@ void process_a(void *arg) {
         kprint_dec(count++);
         hal_uart_puts("\n");
         
-        // Precise delay: 10ms for 100Hz update rate
-        udelay(10000);
-        
-        // Yield to other processes
+        // Yield to other processes (rely on preemptive scheduling)
         process_yield();
     }
 }
@@ -46,10 +51,7 @@ void process_b(void *arg) {
         kprint_dec(count++);
         hal_uart_puts("\n");
         
-        // Precise delay: 10ms for 100Hz update rate
-        udelay(10000);
-        
-        // Yield to other processes
+        // Yield to other processes (rely on preemptive scheduling)
         process_yield();
     }
 }
@@ -62,10 +64,7 @@ void process_c(void *arg) {
         kprint_dec(count++);
         hal_uart_puts("\n");
         
-        // Precise delay: 10ms for 100Hz update rate
-        udelay(10000);
-        
-        // Yield to other processes
+        // Yield to other processes (rely on preemptive scheduling)
         process_yield();
     }
 }
@@ -79,7 +78,9 @@ void kernel_main(void) {
     hal_uart_puts("=================================\n");
     hal_uart_puts("   ThunderOS - RISC-V AI OS\n");
     hal_uart_puts("=================================\n");
-    hal_uart_puts("Kernel loaded at 0x80200000\n");
+    hal_uart_puts("Kernel loaded at 0x");
+    kprint_hex(KERNEL_LOAD_ADDRESS);
+    hal_uart_puts("\n");
     hal_uart_puts("Initializing...\n\n");
     
     hal_uart_puts("[OK] UART initialized\n");
@@ -101,23 +102,20 @@ void kernel_main(void) {
     hal_uart_puts("[OK] Timer interrupts enabled\n");
     
     // Initialize memory management
-    // QEMU virt machine has 128MB RAM at 0x80000000
+    // QEMU virt machine: 128MB RAM at 0x80000000 to 0x88000000
     // Our kernel ends at _kernel_end, so free memory starts there
     uintptr_t kernel_end = (uintptr_t)_kernel_end;
     uintptr_t mem_start = kernel_end;
     
-    // Total RAM: 128MB, starts at 0x80000000, ends at 0x88000000
-    // Free memory = from kernel_end to end of RAM
-    uintptr_t ram_end = 0x88000000;
-    size_t free_mem_size = ram_end - mem_start;
+    // Calculate free memory region
+    size_t free_mem_size = RAM_END_ADDRESS - mem_start;
     
     pmm_init(mem_start, free_mem_size);
     hal_uart_puts("[OK] Memory management initialized\n");
     
     // Initialize virtual memory (paging)
-    // For now, we identity map the kernel region
-    uintptr_t kernel_start = 0x80200000;  // From linker script
-    paging_init(kernel_start, kernel_end);
+    // Identity map the kernel region
+    paging_init(KERNEL_LOAD_ADDRESS, kernel_end);
     hal_uart_puts("[OK] Virtual memory initialized\n");
     
     // Test memory allocation
@@ -144,8 +142,10 @@ void kernel_main(void) {
     }
     
     // Test kmalloc
-    hal_uart_puts("  Testing kmalloc(256)... ");
-    void *ptr = kmalloc(256);
+    hal_uart_puts("  Testing kmalloc(");
+    kprint_dec(TEST_ALLOC_SIZE);
+    hal_uart_puts(")... ");
+    void *ptr = kmalloc(TEST_ALLOC_SIZE);
     if (ptr) {
         hal_uart_puts("OK\n");
     } else {

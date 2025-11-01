@@ -19,7 +19,9 @@ static int queue_count = 0;
 // Scheduler lock
 static volatile int sched_lock = 0;
 
-// Time slice for round-robin (in timer ticks)
+// Time slice for round-robin scheduling
+// Units: timer ticks (1 tick = 100ms timer interval)
+// TIME_SLICE = 10 ticks = 10 * 100ms = 1000ms = 1 second per process
 #define TIME_SLICE 10
 static uint64_t current_time_slice = 0;
 
@@ -126,11 +128,14 @@ extern void process_set_current(struct process *proc);
 
 /**
  * Perform a context switch from old process to new process
+ * 
+ * NOTE: This function MUST be called with interrupts disabled
+ * to ensure atomic state updates and prevent race conditions.
  */
 void context_switch(struct process *old, struct process *new) {
     if (!new) return;
     
-    // Update states
+    // Update states (interrupts must be disabled by caller)
     if (old && old->state == PROC_RUNNING) {
         old->state = PROC_READY;
     }
