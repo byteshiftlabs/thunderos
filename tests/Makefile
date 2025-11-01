@@ -25,12 +25,25 @@ LDFLAGS := -nostdlib -T $(KERNEL_DIR)/arch/riscv64/kernel.ld
 BOOT_OBJ := $(BUILD_DIR)/boot.o
 UART_OBJ := $(BUILD_DIR)/uart.o
 CLINT_OBJ := $(BUILD_DIR)/clint.o
+PLIC_OBJ := $(BUILD_DIR)/plic.o
+INTERRUPT_OBJ := $(BUILD_DIR)/interrupt.o
+TIMER_OBJ := $(BUILD_DIR)/timer.o
+SCHEDULER_OBJ := $(BUILD_DIR)/scheduler.o
+PROCESS_OBJ := $(BUILD_DIR)/process.o
+SWITCH_OBJ := $(BUILD_DIR)/switch.o
+PANIC_OBJ := $(BUILD_DIR)/panic.o
+KSTRING_OBJ := $(BUILD_DIR)/kstring.o
+KMALLOC_OBJ := $(BUILD_DIR)/kmalloc.o
+PAGING_OBJ := $(BUILD_DIR)/paging.o
+PMM_OBJ := $(BUILD_DIR)/pmm.o
 TRAP_OBJ := $(BUILD_DIR)/trap.o
 TRAP_ENTRY_OBJ := $(BUILD_DIR)/trap_entry.o
 KUNIT_OBJ := $(BUILD_DIR)/kunit.o
 
 COMMON_OBJS := $(BOOT_OBJ) $(UART_OBJ) $(TRAP_OBJ) $(TRAP_ENTRY_OBJ) $(KUNIT_OBJ)
-COMMON_OBJS_WITH_CLINT := $(COMMON_OBJS) $(CLINT_OBJ)
+COMMON_OBJS_WITH_CLINT := $(COMMON_OBJS) $(CLINT_OBJ) $(PLIC_OBJ) $(INTERRUPT_OBJ) \
+                          $(TIMER_OBJ) $(SCHEDULER_OBJ) $(PROCESS_OBJ) $(SWITCH_OBJ) \
+                          $(PANIC_OBJ) $(KSTRING_OBJ) $(KMALLOC_OBJ) $(PAGING_OBJ) $(PMM_OBJ)
 
 # Test targets
 TEST_TRAP := $(BUILD_DIR)/test_trap.elf
@@ -71,19 +84,63 @@ $(BOOT_OBJ): ../boot/boot.S
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(UART_OBJ): $(KERNEL_DIR)/drivers/uart.c
+$(UART_OBJ): $(KERNEL_DIR)/arch/riscv64/drivers/uart.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(CLINT_OBJ): $(KERNEL_DIR)/drivers/clint.c
+$(CLINT_OBJ): $(KERNEL_DIR)/arch/riscv64/drivers/clint.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(TRAP_OBJ): $(KERNEL_DIR)/arch/riscv64/trap.c
+$(TRAP_OBJ): $(KERNEL_DIR)/arch/riscv64/core/trap.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 $(TRAP_ENTRY_OBJ): $(KERNEL_DIR)/arch/riscv64/trap_entry.S
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(INTERRUPT_OBJ): $(KERNEL_DIR)/arch/riscv64/drivers/interrupt.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(TIMER_OBJ): $(KERNEL_DIR)/arch/riscv64/drivers/timer.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(SCHEDULER_OBJ): $(KERNEL_DIR)/core/scheduler.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(PROCESS_OBJ): $(KERNEL_DIR)/core/process.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(PLIC_OBJ): $(KERNEL_DIR)/arch/riscv64/drivers/plic.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(SWITCH_OBJ): $(KERNEL_DIR)/arch/riscv64/switch.S
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(PANIC_OBJ): $(KERNEL_DIR)/core/panic.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(KSTRING_OBJ): $(KERNEL_DIR)/core/kstring.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(KMALLOC_OBJ): $(KERNEL_DIR)/mm/kmalloc.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(PAGING_OBJ): $(KERNEL_DIR)/mm/paging.c
+	@mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+$(PMM_OBJ): $(KERNEL_DIR)/mm/pmm.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
