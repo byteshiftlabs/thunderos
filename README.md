@@ -1,13 +1,43 @@
+````markdown
 # ThunderOS
 
-A RISC-V operating system specialized for AI workloads.
+A RISC-V operating system focused on AI acceleration and educational use.
 
-## Features (Planned)
-- RISC-V 64-bit architecture
-- Support for RISC-V Vector Extension (RVV)
-- Optimized task scheduling for AI workloads
-- Memory management for large models
-- Hardware accelerator support
+## Current Status
+
+**Version 0.1.0 - "First Boot"** 🎯
+
+See [CHANGELOG.md](CHANGELOG.md) for complete feature list and [ROADMAP.md](ROADMAP.md) for future plans.
+
+## Quick Start
+
+### Building
+```bash
+make all
+```
+
+### Running in QEMU
+```bash
+make qemu
+```
+
+### Debugging
+```bash
+make debug
+# In another terminal:
+riscv64-unknown-elf-gdb build/thunderos.elf
+(gdb) target remote :1234
+```
+
+## Documentation
+
+Full technical documentation is available in Sphinx format:
+
+```bash
+cd docs
+make html
+# Open docs/build/html/index.html in browser
+```
 
 ## Project Structure
 ```
@@ -16,59 +46,36 @@ kernel/              - Kernel core
   arch/riscv64/      - RISC-V architecture-specific code
     drivers/         - RISC-V HAL implementations (UART, timer, etc.)
     interrupt/       - Trap/interrupt handling
-    cpu/             - CPU control and management
-  core/              - Portable kernel core
-  drivers/           - High-level device drivers
-  mm/                - Memory management
-  sched/             - Task scheduler
+  core/              - Portable kernel core (process, scheduler, panic)
+  mm/                - Memory management (PMM, kmalloc, paging)
 include/             - Header files
   hal/               - Hardware Abstraction Layer interfaces
   kernel/            - Kernel subsystem headers
   arch/              - Architecture-specific headers
-lib/                 - Utility libraries
+docs/                - Sphinx documentation
+tests/               - Test framework and test cases
 build/               - Build output
 ```
 
-## Building
-```bash
-make all
-```
+## Development
 
-## Running in QEMU
-```bash
-make qemu
-```
+See [ROADMAP.md](ROADMAP.md) for the development roadmap from v0.1 through v2.0.
 
-## Documentation
+See [docs/source/development/code_quality.rst](docs/source/development/code_quality.rst) for coding standards.
 
-Full documentation is available in Sphinx format:
+## Platform Support
 
-```bash
-cd docs
-make html
-# Open docs/build/html/index.html in browser
-```
+- **QEMU virt machine**: Tested and working ✓
+- **Real RISC-V hardware**: Planned for v0.9+
 
-Online: See `docs/build/html/index.html`
+## Dependencies
 
-## Development Roadmap
-1. ✓ Project setup
-2. ✓ Bootloader and kernel entry
-3. ✓ UART driver
-4. ✓ Documentation (Sphinx)
-5. ✓ Hardware Abstraction Layer (HAL) - UART
-6. [ ] HAL - Timer and interrupts
-7. [ ] Memory management (physical and virtual)
-8. [ ] Process management and scheduling
-9. [ ] AI accelerator support
+- **Toolchain**: riscv64-unknown-elf-gcc (GCC for RISC-V)
+- **Emulator**: QEMU 5.0+ with RISC-V support
+- **Firmware**: OpenSBI (provided by QEMU)
+- **Documentation** (optional): Sphinx 4.0+
 
-## Architecture Support
+## License
 
-ThunderOS uses a Hardware Abstraction Layer (HAL) to support multiple architectures:
-
-- **RISC-V 64-bit** (Primary) - Full support with RVV optimizations
-- **ARM64/AArch64** (Planned) - For mobile and embedded AI
-- **x86-64** (Planned) - For cloud and development
-
-The HAL allows portable kernel code to run on any architecture while maintaining
-architecture-specific optimizations in isolated modules.
+See [LICENSE](LICENSE) file for details.
+````
