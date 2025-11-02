@@ -3,7 +3,7 @@
  */
 
 #include "trap.h"
-#include "uart.h"
+#include "hal/hal_uart.h"
 #include "clint.h"
 
 // CSR read helpers
@@ -57,30 +57,30 @@ static void print_hex(unsigned long val) {
     }
     buf[18] = '\0';
     
-    uart_puts(buf);
+    hal_uart_puts(buf);
 }
 
 // Handle exceptions (synchronous traps)
 static void handle_exception(struct trap_frame *tf, unsigned long cause) {
-    uart_puts("\n!!! EXCEPTION !!!\n");
-    uart_puts("Cause: ");
+    hal_uart_puts("\n!!! EXCEPTION !!!\n");
+    hal_uart_puts("Cause: ");
     
     if (cause < sizeof(exception_names) / sizeof(exception_names[0])) {
-        uart_puts(exception_names[cause]);
+        hal_uart_puts(exception_names[cause]);
     } else {
-        uart_puts("Unknown");
+        hal_uart_puts("Unknown");
     }
     
-    uart_puts("\nsepc:   ");
+    hal_uart_puts("\nsepc:   ");
     print_hex(tf->sepc);
-    uart_puts("\nstval:  ");
+    hal_uart_puts("\nstval:  ");
     print_hex(read_stval());
-    uart_puts("\nscause: ");
+    hal_uart_puts("\nscause: ");
     print_hex(cause);
-    uart_puts("\n");
+    hal_uart_puts("\n");
     
     // Halt system
-    uart_puts("System halted.\n");
+    hal_uart_puts("System halted.\n");
     while (1) {
         asm volatile("wfi");
     }
@@ -96,15 +96,15 @@ static void handle_interrupt(struct trap_frame *tf __attribute__((unused)), unsi
             clint_handle_timer();
             break;
         case IRQ_S_SOFT:
-            uart_puts("Software interrupt\n");
+            hal_uart_puts("Software interrupt\n");
             break;
         case IRQ_S_EXTERNAL:
-            uart_puts("External interrupt\n");
+            hal_uart_puts("External interrupt\n");
             break;
         default:
-            uart_puts("Unknown interrupt: ");
+            hal_uart_puts("Unknown interrupt: ");
             print_hex(cause);
-            uart_puts("\n");
+            hal_uart_puts("\n");
             break;
     }
 }
@@ -130,5 +130,5 @@ void trap_init(void) {
     // Mode: Direct (0) - all traps set pc to BASE
     asm volatile("csrw stvec, %0" :: "r"((unsigned long)trap_vector));
     
-    uart_puts("Trap handler initialized\n");
+    hal_uart_puts("Trap handler initialized\n");
 }
