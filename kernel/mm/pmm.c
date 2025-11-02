@@ -1,0 +1,162 @@
+/*
+ * Physical Memory Manager Implementation
+ * 
+ * Uses a bitmap allocator for simplicity and efficiency.
+ * Each bit represents one 4KB page: 0=free, 1=allocated
+ */
+
+#include "mm/pmm.h"
+#include "hal/hal_uart.h"
+
+// Memory region information
+static uintptr_t memory_start = 0;
+static size_t total_pages = 0;
+static size_t free_pages = 0;
+
+// Bitmap to track page allocation
+// Each byte represents 8 pages (1 bit per page)
+#define BITMAP_SIZE 4096  // Supports up to 32MB with 4KB pages (4096 bytes * 8 bits/byte * 4KB/page)
+static uint8_t page_bitmap[BITMAP_SIZE];
+
+// Helper: Check if a bit is set in the bitmap
+static inline int bitmap_test(size_t page_num) {
+    size_t byte_index = page_num / 8;
+    size_t bit_index = page_num % 8;
+    return (page_bitmap[byte_index] >> bit_index) & 1;
+}
+
+// Helper: Set a bit in the bitmap (mark page as allocated)
+static inline void bitmap_set(size_t page_num) {
+    size_t byte_index = page_num / 8;
+    size_t bit_index = page_num % 8;
+    page_bitmap[byte_index] |= (1 << bit_index);
+}
+
+// Helper: Clear a bit in the bitmap (mark page as free)
+static inline void bitmap_clear(size_t page_num) {
+    size_t byte_index = page_num / 8;
+    size_t bit_index = page_num % 8;
+    page_bitmap[byte_index] &= ~(1 << bit_index);
+}
+
+/**
+ * Initialize the physical memory manager
+ */
+void pmm_init(uintptr_t mem_start, size_t mem_size) {
+    // Store memory region info
+    memory_start = PAGE_ALIGN_UP(mem_start);
+    total_pages = mem_size / PAGE_SIZE;
+    
+    // Limit to bitmap capacity
+    size_t max_pages = BITMAP_SIZE * 8;
+    if (total_pages > max_pages) {
+        total_pages = max_pages;
+    }
+    
+    free_pages = total_pages;
+    
+    // Initialize bitmap: all pages start as free (0)
+    for (size_t i = 0; i < BITMAP_SIZE; i++) {
+        page_bitmap[i] = 0;
+    }
+    
+    // Print initialization info
+    hal_uart_puts("PMM: Initialized\n");
+    hal_uart_puts("  Memory start: 0x");
+    
+    // Print hex address
+    char hex[17];
+    uintptr_t addr = memory_start;
+    for (int i = 15; i >= 0; i--) {
+        int digit = (addr >> (i * 4)) & 0xF;
+        hex[15 - i] = digit < 10 ? '0' + digit : 'a' + digit - 10;
+    }
+    hex[16] = '\0';
+    hal_uart_puts(hex);
+    hal_uart_puts("\n");
+    
+    hal_uart_puts("  Total pages: ");
+    // Simple number printing
+    if (total_pages < 10) {
+        hal_uart_putc('0' + total_pages);
+    } else {
+        char buf[20];
+        int i = 0;
+        size_t n = total_pages;
+        while (n > 0) {
+            buf[i++] = '0' + (n % 10);
+            n /= 10;
+        }
+        while (i > 0) {
+            hal_uart_putc(buf[--i]);
+        }
+    }
+    hal_uart_puts("\n");
+    
+    hal_uart_puts("  Page size: 4KB\n");
+}
+
+/**
+ * Allocate a single physical page
+ */
+uintptr_t pmm_alloc_page(void) {
+    // Find first free page in bitmap
+    for (size_t page_num = 0; page_num < total_pages; page_num++) {
+        if (!bitmap_test(page_num)) {
+            // Found a free page!
+            bitmap_set(page_num);
+            free_pages--;
+            
+            // Calculate physical address
+            uintptr_t page_addr = memory_start + (page_num * PAGE_SIZE);
+            return page_addr;
+        }
+    }
+    
+    // Out of memory!
+    hal_uart_puts("PMM: Out of memory!\n");
+    return 0;
+}
+
+/**
+ * Free a previously allocated page
+ */
+void pmm_free_page(uintptr_t page_addr) {
+    // Validate address is page-aligned
+    if (page_addr & (PAGE_SIZE - 1)) {
+        hal_uart_puts("PMM: Error - address not page-aligned\n");
+        return;
+    }
+    
+    // Validate address is in managed region
+    if (page_addr < memory_start) {
+        hal_uart_puts("PMM: Error - address below managed region\n");
+        return;
+    }
+    
+    // Calculate page number
+    size_t page_num = (page_addr - memory_start) / PAGE_SIZE;
+    
+    if (page_num >= total_pages) {
+        hal_uart_puts("PMM: Error - address above managed region\n");
+        return;
+    }
+    
+    // Check if page is actually allocated
+    if (!bitmap_test(page_num)) {
+        hal_uart_puts("PMM: Warning - freeing already-free page\n");
+        return;
+    }
+    
+    // Free the page
+    bitmap_clear(page_num);
+    free_pages++;
+}
+
+/**
+ * Get memory statistics
+ */
+void pmm_get_stats(size_t *total, size_t *free) {
+    if (total) *total = total_pages;
+    if (free) *free = free_pages;
+}
