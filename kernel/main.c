@@ -7,6 +7,7 @@
 #include "trap.h"
 #include "mm/pmm.h"
 #include "mm/kmalloc.h"
+#include "mm/paging.h"
 #include "kernel/kstring.h"
 
 // Timer interval: 1 second = 1,000,000 microseconds
@@ -50,6 +51,12 @@ void kernel_main(void) {
     
     pmm_init(mem_start, free_mem_size);
     hal_uart_puts("[OK] Memory management initialized\n");
+    
+    // Initialize virtual memory (paging)
+    // For now, we identity map the kernel region
+    uintptr_t kernel_start = 0x80200000;  // From linker script
+    paging_init(kernel_start, kernel_end);
+    hal_uart_puts("[OK] Virtual memory initialized\n");
     
     // Test memory allocation
     hal_uart_puts("\nTesting memory allocation:\n");
