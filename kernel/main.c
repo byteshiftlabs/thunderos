@@ -5,9 +5,14 @@
 #include "hal/hal_uart.h"
 #include "hal/hal_timer.h"
 #include "trap.h"
+#include "mm/pmm.h"
+#include "mm/kmalloc.h"
 
 // Timer interval: 1 second = 1,000,000 microseconds
 #define TIMER_INTERVAL_US 1000000
+
+// Linker symbols (defined in kernel.ld)
+extern char _kernel_end[];
 
 void kernel_main(void) {
     // Initialize UART for serial output
@@ -31,8 +36,98 @@ void kernel_main(void) {
     hal_timer_init(TIMER_INTERVAL_US);
     hal_uart_puts("[OK] Timer interrupts enabled\n");
     
-    hal_uart_puts("[  ] Memory management: TODO\n");
-    hal_uart_puts("[  ] Process scheduler: TODO\n");
+    // Initialize memory management
+    // QEMU virt machine has 128MB RAM at 0x80000000
+    // Our kernel ends at _kernel_end, so free memory starts there
+    uintptr_t kernel_end = (uintptr_t)_kernel_end;
+    uintptr_t mem_start = kernel_end;
+    
+    // Total RAM: 128MB, starts at 0x80000000, ends at 0x88000000
+    // Free memory = from kernel_end to end of RAM
+    uintptr_t ram_end = 0x88000000;
+    size_t free_mem_size = ram_end - mem_start;
+    
+    pmm_init(mem_start, free_mem_size);
+    hal_uart_puts("[OK] Memory management initialized\n");
+    
+    // Test memory allocation
+    hal_uart_puts("\nTesting memory allocation:\n");
+    
+    // Allocate a page
+    hal_uart_puts("  Allocating page 1... ");
+    uintptr_t page1 = pmm_alloc_page();
+    if (page1) {
+        hal_uart_puts("OK (addr: 0x");
+        // Print address
+        char hex[17];
+        for (int i = 15; i >= 0; i--) {
+            int digit = (page1 >> (i * 4)) & 0xF;
+            hex[15 - i] = digit < 10 ? '0' + digit : 'a' + digit - 10;
+        }
+        hex[16] = '\0';
+        hal_uart_puts(hex);
+        hal_uart_puts(")\n");
+    } else {
+        hal_uart_puts("FAILED\n");
+    }
+    
+    // Allocate another page
+    hal_uart_puts("  Allocating page 2... ");
+    uintptr_t page2 = pmm_alloc_page();
+    if (page2) {
+        hal_uart_puts("OK\n");
+    } else {
+        hal_uart_puts("FAILED\n");
+    }
+    
+    // Test kmalloc
+    hal_uart_puts("  Testing kmalloc(256)... ");
+    void *ptr = kmalloc(256);
+    if (ptr) {
+        hal_uart_puts("OK\n");
+    } else {
+        hal_uart_puts("FAILED\n");
+    }
+    
+    // Free page 1
+    hal_uart_puts("  Freeing page 1... ");
+    pmm_free_page(page1);
+    hal_uart_puts("OK\n");
+    
+    // Free kmalloc'd memory
+    hal_uart_puts("  Freeing kmalloc memory... ");
+    kfree(ptr);
+    hal_uart_puts("OK\n");
+    
+    // Print memory stats
+    size_t total, free;
+    pmm_get_stats(&total, &free);
+    hal_uart_puts("\nMemory statistics:\n");
+    hal_uart_puts("  Total pages: ");
+    // Print number
+    char buf[20];
+    int i = 0;
+    size_t n = total;
+    while (n > 0) {
+        buf[i++] = '0' + (n % 10);
+        n /= 10;
+    }
+    while (i > 0) {
+        hal_uart_putc(buf[--i]);
+    }
+    hal_uart_puts("\n  Free pages:  ");
+    i = 0;
+    n = free;
+    while (n > 0) {
+        buf[i++] = '0' + (n % 10);
+        n /= 10;
+    }
+    while (i > 0) {
+        hal_uart_putc(buf[--i]);
+    }
+    hal_uart_puts("\n");
+    
+    hal_uart_puts("\n[  ] Process scheduler: TODO\n");
     hal_uart_puts("[  ] AI accelerators: TODO\n");
     
     hal_uart_puts("\nThunderOS kernel idle. Waiting for timer interrupts...\n");
