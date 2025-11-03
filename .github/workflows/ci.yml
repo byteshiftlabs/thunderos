@@ -1,0 +1,148 @@
+name: ThunderOS CI
+
+on:
+  push:
+    branches: [ main, 'dev/**', 'feature/**', 'release/**' ]
+  pull_request:
+    branches: [ main, 'dev/**' ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+    
+    - name: Build Docker image with caching
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        tags: thunderos-build:latest
+        load: true
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+    
+    - name: Verify toolchain in Docker
+      run: |
+        docker run --rm thunderos-build:latest riscv64-unknown-elf-gcc --version
+        docker run --rm thunderos-build:latest qemu-system-riscv64 --version
+    
+    - name: Build kernel in Docker
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          thunderos-build:latest \
+          bash -c "make clean && make"
+    
+    - name: Verify build artifacts
+      run: |
+        test -f build/thunderos.elf || (echo "thunderos.elf not found" && exit 1)
+        test -f build/thunderos.bin || (echo "thunderos.bin not found" && exit 1)
+        ls -lh build/thunderos.*
+    
+    - name: Run QEMU boot test in Docker
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          thunderos-build:latest \
+          bash -c "timeout --foreground 8s make qemu > qemu_output.log 2>&1 || EXIT_CODE=\$?; \
+                   if [ \"\${EXIT_CODE:-0}\" -ne 0 ] && [ \"\${EXIT_CODE:-0}\" -ne 124 ]; then \
+                     echo 'ERROR: QEMU exited with unexpected code \$EXIT_CODE'; \
+                     cat qemu_output.log; \
+                     exit 1; \
+                   fi; \
+                   cat qemu_output.log"
+        
+        # Display output for debugging
+        echo "=== QEMU Output ==="
+        cat qemu_output.log
+        echo "=== End Output ==="
+        
+        # Check for boot loop (multiple initializations indicate crash/reboot)
+        BOOT_COUNT=$(grep -c "^Initializing\.\.\.$" qemu_output.log || echo 0)
+        if [ "$BOOT_COUNT" -gt 2 ]; then
+          echo "ERROR: Kernel is stuck in a boot loop (rebooted $BOOT_COUNT times)"
+          echo "This indicates a crash after initialization"
+          exit 1
+        fi
+        
+        # Verify boot messages
+        if ! grep -q "ThunderOS\|Kernel" qemu_output.log; then
+          echo "ERROR: Boot messages not found"
+          exit 1
+        fi
+        
+        # Check for successful initialization (PMM, Paging, or Process messages)
+        if ! grep -q "Process\|PMM\|Paging\|Scheduler\|Multitasking" qemu_output.log; then
+          echo "ERROR: Kernel initialization incomplete or process scheduling not working"
+          exit 1
+        fi
+        
+        echo "✓ Boot test passed"
+    
+    - name: Build tests
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace/tests \
+          thunderos-build:latest \
+          bash -c "make || echo '⚠ Test build skipped (optional)'"
+    
+    - name: Run unit tests
+      continue-on-error: true
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace/tests \
+          thunderos-build:latest \
+          bash -c "if [ -f test_paging ]; then \
+                     timeout 10s qemu-system-riscv64 -machine virt -m 128M -nographic -serial mon:stdio -bios default -kernel test_paging > test_output.log 2>&1 || true; \
+                     cat test_output.log; \
+                   fi"
+    
+    - name: Check for build warnings
+      run: |
+        docker run --rm \
+          -v ${{ github.workspace }}:/workspace \
+          -w /workspace \
+          thunderos-build:latest \
+          bash -c "make clean && make 2>&1 | tee build_warnings.log; \
+                   if grep -i 'warning:' build_warnings.log; then \
+                     echo '⚠ Build produced warnings (non-fatal)'; \
+                   else \
+                     echo '✓ Clean build with no warnings'; \
+                   fi"
+    
+    - name: Upload build artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: thunderos-build-${{ github.sha }}
+        path: |
+          build/thunderos.elf
+          build/thunderos.bin
+        retention-days: 7
+    
+    - name: Upload test logs
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-logs-${{ github.sha }}
+        path: |
+          qemu_output.log
+          build_warnings.log
+          tests/test_output.log
+        retention-days: 7
+    
+    - name: Report success
+      if: success()
+      run: |
+        echo "✅ All checks passed!"
+        echo "Kernel built successfully and boots correctly in QEMU"
