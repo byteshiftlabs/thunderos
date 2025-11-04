@@ -130,6 +130,12 @@ uintptr_t pmm_alloc_pages(size_t num_pages) {
         return pmm_alloc_page();
     }
     
+    // Check if request exceeds total pages (prevent underflow)
+    if (num_pages > total_pages) {
+        hal_uart_puts("PMM: Request exceeds total pages\n");
+        return 0;
+    }
+    
     // Search for contiguous free pages
     for (size_t start_page = 0; start_page <= total_pages - num_pages; start_page++) {
         // Check if we have num_pages contiguous free pages starting at start_page
