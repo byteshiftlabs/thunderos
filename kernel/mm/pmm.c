@@ -8,6 +8,21 @@
 #include "mm/pmm.h"
 #include "hal/hal_uart.h"
 
+// Bitmap allocation constants
+#define BITS_PER_BYTE 8
+#define BITMAP_SIZE 4096  // Supports up to 32MB with 4KB pages (4096 bytes * 8 bits/byte * 4KB/page)
+
+// Hexadecimal conversion constants
+#define HEX_BUFFER_SIZE 17      // 16 hex digits + null terminator
+#define HEX_DIGIT_SHIFT 4       // Bits per hex digit
+#define HEX_DIGIT_MASK 0xF      // Mask for one hex digit
+#define HEX_DIGIT_OFFSET 10     // Offset from '0' to 'a' for digits >= 10
+#define HEX_DIGITS_IN_64BIT 16  // Number of hex digits in 64-bit value
+
+// Decimal conversion constants
+#define DECIMAL_BUFFER_SIZE 20  // Max digits in 64-bit number
+#define DECIMAL_BASE 10
+
 // Memory region information
 static uintptr_t memory_start = 0;
 static size_t total_pages = 0;
@@ -15,27 +30,26 @@ static size_t free_pages = 0;
 
 // Bitmap to track page allocation
 // Each byte represents 8 pages (1 bit per page)
-#define BITMAP_SIZE 4096  // Supports up to 32MB with 4KB pages (4096 bytes * 8 bits/byte * 4KB/page)
 static uint8_t page_bitmap[BITMAP_SIZE];
 
 // Helper: Check if a bit is set in the bitmap
 static inline int bitmap_test(size_t page_num) {
-    size_t byte_index = page_num / 8;
-    size_t bit_index = page_num % 8;
+    size_t byte_index = page_num / BITS_PER_BYTE;
+    size_t bit_index = page_num % BITS_PER_BYTE;
     return (page_bitmap[byte_index] >> bit_index) & 1;
 }
 
 // Helper: Set a bit in the bitmap (mark page as allocated)
 static inline void bitmap_set(size_t page_num) {
-    size_t byte_index = page_num / 8;
-    size_t bit_index = page_num % 8;
+    size_t byte_index = page_num / BITS_PER_BYTE;
+    size_t bit_index = page_num % BITS_PER_BYTE;
     page_bitmap[byte_index] |= (1 << bit_index);
 }
 
 // Helper: Clear a bit in the bitmap (mark page as free)
 static inline void bitmap_clear(size_t page_num) {
-    size_t byte_index = page_num / 8;
-    size_t bit_index = page_num % 8;
+    size_t byte_index = page_num / BITS_PER_BYTE;
+    size_t bit_index = page_num % BITS_PER_BYTE;
     page_bitmap[byte_index] &= ~(1 << bit_index);
 }
 
@@ -48,7 +62,7 @@ void pmm_init(uintptr_t mem_start, size_t mem_size) {
     total_pages = mem_size / PAGE_SIZE;
     
     // Limit to bitmap capacity
-    size_t max_pages = BITMAP_SIZE * 8;
+    size_t max_pages = BITMAP_SIZE * BITS_PER_BYTE;
     if (total_pages > max_pages) {
         total_pages = max_pages;
     }
@@ -65,27 +79,27 @@ void pmm_init(uintptr_t mem_start, size_t mem_size) {
     hal_uart_puts("  Memory start: 0x");
     
     // Print hex address
-    char hex[17];
+    char hex[HEX_BUFFER_SIZE];
     uintptr_t addr = memory_start;
-    for (int i = 15; i >= 0; i--) {
-        int digit = (addr >> (i * 4)) & 0xF;
-        hex[15 - i] = digit < 10 ? '0' + digit : 'a' + digit - 10;
+    for (int i = HEX_DIGITS_IN_64BIT - 1; i >= 0; i--) {
+        int digit = (addr >> (i * HEX_DIGIT_SHIFT)) & HEX_DIGIT_MASK;
+        hex[HEX_DIGITS_IN_64BIT - 1 - i] = digit < DECIMAL_BASE ? '0' + digit : 'a' + digit - HEX_DIGIT_OFFSET;
     }
-    hex[16] = '\0';
+    hex[HEX_DIGITS_IN_64BIT] = '\0';
     hal_uart_puts(hex);
     hal_uart_puts("\n");
     
     hal_uart_puts("  Total pages: ");
     // Simple number printing
-    if (total_pages < 10) {
+    if (total_pages < DECIMAL_BASE) {
         hal_uart_putc('0' + total_pages);
     } else {
-        char buf[20];
+        char buf[DECIMAL_BUFFER_SIZE];
         int i = 0;
         size_t n = total_pages;
         while (n > 0) {
-            buf[i++] = '0' + (n % 10);
-            n /= 10;
+            buf[i++] = '0' + (n % DECIMAL_BASE);
+            n /= DECIMAL_BASE;
         }
         while (i > 0) {
             hal_uart_putc(buf[--i]);
@@ -165,12 +179,12 @@ uintptr_t pmm_alloc_pages(size_t num_pages) {
     if (num_pages == 0) {
         hal_uart_putc('0');
     } else {
-        char buf[20];
+        char buf[DECIMAL_BUFFER_SIZE];
         int idx = 0;
         size_t n = num_pages;
         while (n > 0) {
-            buf[idx++] = '0' + (n % 10);
-            n /= 10;
+            buf[idx++] = '0' + (n % DECIMAL_BASE);
+            n /= DECIMAL_BASE;
         }
         while (idx > 0) {
             hal_uart_putc(buf[--idx]);
