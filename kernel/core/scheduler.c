@@ -219,15 +219,7 @@ void schedule(void) {
 }
 
 /**
- * Helper function called from assembly to get trap frame
- */
-struct trap_frame *process_get_trap_frame(void) {
-    struct process *proc = process_current();
-    return proc ? proc->trap_frame : NULL;
-}
-
-/**
- * Helper function to get current process trap frame (for assembly)
+ * Helper function called from assembly to get current process trap frame
  */
 struct trap_frame *process_get_current_trap_frame(void) {
     struct process *proc = process_current();
