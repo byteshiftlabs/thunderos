@@ -5,17 +5,7 @@ All notable changes to ThunderOS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
-
-### Before v0.1.0 Release
-- Comprehensive testing on QEMU with different RAM configurations
-- Memory leak verification
-- Extended runtime stability testing
-- Documentation review and updates
-
----
-
-## [0.1.0] - TBD - "First Boot"
+## [0.1.0] - 2025-11-01 - "First Boot"
 
 ### Overview
 First functional release of ThunderOS. Provides basic kernel infrastructure with preemptive multitasking on RISC-V 64-bit architecture running in QEMU.
@@ -147,7 +137,6 @@ First functional release of ThunderOS. Provides basic kernel infrastructure with
 - **Shared Page Table**: All processes use kernel page table
   - No memory isolation between processes
   - All memory is accessible to all processes
-- **Page Table Memory Leak**: Page tables not freed on process termination
 
 #### Process Management
 - **Supervisor Mode Only**: All processes run in S-mode
