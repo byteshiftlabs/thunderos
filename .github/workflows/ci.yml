@@ -48,17 +48,15 @@ jobs:
     - name: Run QEMU boot test
       run: |
         # Run QEMU in background and capture output
-        make qemu > qemu_output.log 2>&1 &
-        QEMU_PID=$!
+        timeout --foreground 8s make qemu > qemu_output.log 2>&1 || EXIT_CODE=$?
         
-        # Wait for QEMU to start and produce output (8 seconds for full initialization)
-        sleep 8
-        
-        # Kill QEMU process and all its children
-        kill -TERM $QEMU_PID 2>/dev/null || true
-        sleep 1
-        kill -KILL $QEMU_PID 2>/dev/null || true
-        wait $QEMU_PID 2>/dev/null || true
+        # timeout returns 124 if it had to kill the process (expected)
+        # Any other non-zero exit code indicates a real error
+        if [ "${EXIT_CODE:-0}" -ne 0 ] && [ "${EXIT_CODE:-0}" -ne 124 ]; then
+          echo "ERROR: QEMU exited with unexpected code $EXIT_CODE"
+          cat qemu_output.log
+          exit 1
+        fi
         
         # Display output for debugging
         echo "=== QEMU Output ==="
