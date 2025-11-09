@@ -230,7 +230,9 @@ Physical Memory Manager (PMM)
    
       size_t total, free;
       pmm_get_stats(&total, &free);
-      hal_uart_puts("Memory: %lu KB free\n", free * 4);
+      hal_uart_puts("Memory: ");
+      kprint_dec(free * 4);
+      hal_uart_puts(" KB free\n");
 
 Kernel Heap (kmalloc)
 ~~~~~~~~~~~~~~~~~~~~~~
