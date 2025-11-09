@@ -38,26 +38,34 @@ This document outlines the planned development milestones for ThunderOS, a RISC-
 
 ---
 
-## Version 0.2.0 - "User Space" 🎯 CURRENT TARGET
+## Version 0.2.0 - "User Space" ✅ RELEASED
 
-**Status:** In Development
+**Status:** Released on November 9, 2025
 
 **Focus:** Separation of kernel and user mode
 
-### Planned Features
-- [ ] User-mode process support (U-mode)
-- [ ] System call interface (minimum 10 syscalls)
-- [ ] Separate page tables per process
-- [ ] Privilege level switching (S-mode ↔ U-mode)
-- [ ] Memory isolation between processes
-- [ ] Basic user-space programs (hello world, calculator)
-- [ ] Exception handling for user programs
+### Completed Features
+- ✅ User-mode process support (U-mode)
+- ✅ System call interface (13 syscalls implemented)
+- ✅ Separate page tables per process
+- ✅ Privilege level switching (S-mode ↔ U-mode)
+- ✅ Memory isolation between processes
+- ✅ Basic user-space programs (hello world, exception test)
+- ✅ Exception handling for user programs
+
+### Testing Completed
+- ✅ User programs run in unprivileged mode
+- ✅ System calls work reliably (13/13 implemented)
+- ✅ Memory protection enforced (page faults handled gracefully)
+- ✅ User process exceptions handled without system halt
+- ✅ Automated test suite passes (6/6 tests)
+- ✅ All processes run concurrently without crashes
 
 **Release Criteria:**
-- User programs run in unprivileged mode
-- System calls work reliably
-- Memory protection enforced
-- At least 3 working user-space programs
+- ✅ User programs run in unprivileged mode
+- ✅ System calls work reliably
+- ✅ Memory protection enforced
+- ✅ At least 3 working user-space programs
 
 ---
 
@@ -280,9 +288,10 @@ See `CONTRIBUTING.md` for details on how to contribute to ThunderOS development.
 Interested in contributing? Here's where we need help:
 
 ### For v0.2 (Current)
-- System call implementation and testing
-- User-mode support and privilege separation
-- Memory isolation improvements
+- [x] System call implementation and testing
+- [x] User-mode support and privilege separation
+- [x] Memory isolation improvements
+- [x] Exception handling for user programs
 
 ### For v0.3+ (Future)
 - Driver development (storage, network, graphics)
