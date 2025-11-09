@@ -16,6 +16,11 @@ check_qemu() {
         echo "  Install QEMU with RISC-V support" >&2
         exit 1
     fi
+    if ! "${QEMU}" --version &> /dev/null; then
+        echo "✗ Error: ${QEMU} is not executable or does not support RISC-V 64-bit" >&2
+        echo "  Ensure QEMU is installed with RISC-V 64-bit support" >&2
+        exit 1
+    fi
 }
 
 build_kernel() {
