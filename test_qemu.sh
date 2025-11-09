@@ -25,7 +25,7 @@ check_qemu() {
 
 build_kernel() {
     echo "Building kernel..."
-    make all
+    make all || { echo '✗ Build failed' >&2; exit 1; }
     
     if [[ ! -f "${KERNEL_ELF}" ]]; then
         echo "✗ Build failed" >&2
