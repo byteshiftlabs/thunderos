@@ -245,4 +245,70 @@ uint32_t ext2_lookup(ext2_fs_t *fs, ext2_inode_t *dir_inode, const char *name);
 typedef void (*ext2_dir_callback_t)(const char *name, uint32_t inode, uint8_t type);
 int ext2_list_dir(ext2_fs_t *fs, ext2_inode_t *dir_inode, ext2_dir_callback_t callback);
 
+/* Write operations */
+
+/**
+ * Allocate a block from block bitmap
+ * Returns block number, or 0 on failure
+ */
+uint32_t ext2_alloc_block(ext2_fs_t *fs, uint32_t group);
+
+/**
+ * Free a block to block bitmap
+ * Returns 0 on success, -1 on error
+ */
+int ext2_free_block(ext2_fs_t *fs, uint32_t block_num);
+
+/**
+ * Allocate an inode from inode bitmap
+ * Returns inode number, or 0 on failure
+ */
+uint32_t ext2_alloc_inode(ext2_fs_t *fs, uint32_t group);
+
+/**
+ * Free an inode to inode bitmap
+ * Returns 0 on success, -1 on error
+ */
+int ext2_free_inode(ext2_fs_t *fs, uint32_t inode_num);
+
+/**
+ * Write data to a file
+ * Returns number of bytes written, or -1 on error
+ */
+int ext2_write_file(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t offset,
+                    const void *buffer, uint32_t size);
+
+/**
+ * Create a new file in a directory
+ * Returns 0 on success, -1 on error
+ */
+int ext2_create_file(ext2_fs_t *fs, ext2_inode_t *dir_inode, const char *name, uint32_t mode);
+
+/**
+ * Create a new directory
+ * Returns 0 on success, -1 on error
+ */
+int ext2_create_dir(ext2_fs_t *fs, ext2_inode_t *dir_inode, const char *name, uint32_t mode);
+
+/**
+ * Remove a file from a directory
+ * Returns 0 on success, -1 on error
+ */
+int ext2_remove_file(ext2_fs_t *fs, ext2_inode_t *dir_inode, const char *name);
+
+/**
+ * Remove a directory
+ * Returns 0 on success, -1 on error
+ */
+int ext2_remove_dir(ext2_fs_t *fs, ext2_inode_t *dir_inode, const char *name);
+
+/* VFS integration */
+
+struct vfs_filesystem;
+/**
+ * Mount ext2 filesystem into VFS
+ * Returns VFS filesystem structure, or NULL on error
+ */
+struct vfs_filesystem *ext2_vfs_mount(ext2_fs_t *ext2_fs);
+
 #endif /* EXT2_H */
