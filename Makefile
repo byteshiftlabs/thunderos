@@ -30,11 +30,13 @@ KERNEL_C_SOURCES := $(wildcard $(KERNEL_DIR)/*.c) \
                     $(wildcard $(KERNEL_DIR)/utils/*.c) \
                     $(wildcard $(KERNEL_DIR)/drivers/*.c) \
                     $(wildcard $(KERNEL_DIR)/mm/*.c) \
+                    $(wildcard $(KERNEL_DIR)/fs/*.c) \
                     $(wildcard $(KERNEL_DIR)/arch/riscv64/*.c) \
                     $(wildcard $(KERNEL_DIR)/arch/riscv64/core/*.c) \
                     $(wildcard $(KERNEL_DIR)/arch/riscv64/drivers/*.c) \
                     tests/test_memory_mgmt.c \
-                    tests/test_virtio_blk.c
+                    tests/test_virtio_blk.c \
+                    tests/test_ext2.c
 KERNEL_ASM_SOURCES := $(wildcard $(KERNEL_DIR)/arch/riscv64/*.S)
 
 # Test programs
@@ -100,6 +102,19 @@ qemu-blk: $(KERNEL_ELF)
 	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) \
 		-global virtio-mmio.force-legacy=false \
 		-drive file=$(BUILD_DIR)/test-disk.img,if=none,format=raw,id=hd0 \
+		-device virtio-blk-device,drive=hd0
+
+qemu-ext2: $(KERNEL_ELF)
+	@echo "Creating ext2 test disk image (10MB)..."
+	@rm -rf $(BUILD_DIR)/testfs
+	@mkdir -p $(BUILD_DIR)/testfs
+	@echo "Hello from ext2 filesystem!" > $(BUILD_DIR)/testfs/test.txt
+	@mkfs.ext2 -F -q -d $(BUILD_DIR)/testfs $(BUILD_DIR)/ext2-disk.img 10M
+	@rm -rf $(BUILD_DIR)/testfs
+	@echo "ext2 filesystem created with test.txt"
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) \
+		-global virtio-mmio.force-legacy=false \
+		-drive file=$(BUILD_DIR)/ext2-disk.img,if=none,format=raw,id=hd0 \
 		-device virtio-blk-device,drive=hd0
 
 debug: $(KERNEL_ELF)

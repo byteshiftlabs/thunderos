@@ -87,3 +87,38 @@ char hal_uart_getc(void) {
     // Read character from receiver buffer
     return uart_read_reg(UART_RBR);
 }
+
+void hal_uart_put_uint32(uint32_t value) {
+    // Convert to decimal string
+    char buffer[11];  // Max 10 digits + null terminator
+    int i = 0;
+    
+    if (value == 0) {
+        hal_uart_putc('0');
+        return;
+    }
+    
+    // Extract digits in reverse order
+    uint32_t temp = value;
+    while (temp > 0) {
+        buffer[i++] = '0' + (temp % 10);
+        temp /= 10;
+    }
+    
+    // Print digits in correct order
+    for (int j = i - 1; j >= 0; j--) {
+        hal_uart_putc(buffer[j]);
+    }
+}
+
+void hal_uart_put_hex(uint32_t value) {
+    const char hex_chars[] = "0123456789ABCDEF";
+    
+    hal_uart_puts("0x");
+    
+    // Print 8 hex digits
+    for (int i = 7; i >= 0; i--) {
+        uint32_t nibble = (value >> (i * 4)) & 0xF;
+        hal_uart_putc(hex_chars[nibble]);
+    }
+}
