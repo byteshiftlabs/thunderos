@@ -33,7 +33,8 @@ KERNEL_C_SOURCES := $(wildcard $(KERNEL_DIR)/*.c) \
                     $(wildcard $(KERNEL_DIR)/arch/riscv64/*.c) \
                     $(wildcard $(KERNEL_DIR)/arch/riscv64/core/*.c) \
                     $(wildcard $(KERNEL_DIR)/arch/riscv64/drivers/*.c) \
-                    tests/test_memory_mgmt.c
+                    tests/test_memory_mgmt.c \
+                    tests/test_virtio_blk.c
 KERNEL_ASM_SOURCES := $(wildcard $(KERNEL_DIR)/arch/riscv64/*.S)
 
 # Test programs
@@ -92,6 +93,14 @@ clean:
 
 qemu: $(KERNEL_ELF)
 	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF)
+
+qemu-blk: $(KERNEL_ELF)
+	@echo "Creating test disk image (10MB)..."
+	@dd if=/dev/zero of=$(BUILD_DIR)/test-disk.img bs=1M count=10 2>/dev/null || true
+	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) \
+		-global virtio-mmio.force-legacy=false \
+		-drive file=$(BUILD_DIR)/test-disk.img,if=none,format=raw,id=hd0 \
+		-device virtio-blk-device,drive=hd0
 
 debug: $(KERNEL_ELF)
 	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) -s -S
