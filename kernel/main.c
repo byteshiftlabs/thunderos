@@ -26,6 +26,7 @@ extern char _kernel_end[];
 // External test functions
 extern void test_memory_management(void);
 extern void test_virtio_blk_all(void);
+extern void test_ext2_all(void);
 
 // Demo process functions
 void process_a(void *arg) {
@@ -179,6 +180,9 @@ void kernel_main(void) {
     
     // Run VirtIO block device tests
     test_virtio_blk_all();
+    
+    // Run ext2 filesystem tests
+    test_ext2_all();
     
     // Initialize process management
     process_init();

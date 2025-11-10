@@ -293,4 +293,10 @@ int virtio_blk_is_readonly(void);
  */
 void virtio_blk_irq_handler(void);
 
+/**
+ * Get the global VirtIO block device
+ * @return Pointer to device structure, or NULL if not initialized
+ */
+virtio_blk_device_t *virtio_blk_get_device(void);
+
 #endif /* VIRTIO_BLK_H */
