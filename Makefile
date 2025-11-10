@@ -36,7 +36,8 @@ KERNEL_C_SOURCES := $(wildcard $(KERNEL_DIR)/*.c) \
                     $(wildcard $(KERNEL_DIR)/arch/riscv64/drivers/*.c) \
                     tests/test_memory_mgmt.c \
                     tests/test_virtio_blk.c \
-                    tests/test_ext2.c
+                    tests/test_ext2.c \
+                    tests/test_vfs.c
 KERNEL_ASM_SOURCES := $(wildcard $(KERNEL_DIR)/arch/riscv64/*.S)
 
 # Test programs
