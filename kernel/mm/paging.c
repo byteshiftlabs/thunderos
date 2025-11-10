@@ -253,6 +253,15 @@ void paging_init(uintptr_t kernel_start, uintptr_t kernel_end) {
         return;
     }
     
+    // Map VirtIO MMIO regions (0x10001000 - 0x10008000, 8 devices)
+    hal_uart_puts("Mapping VirtIO MMIO\n");
+    for (uintptr_t addr = 0x10001000; addr <= 0x10008000; addr += 0x1000) {
+        if (map_page(&kernel_page_table, addr, addr, PTE_KERNEL_DATA) != 0) {
+            hal_uart_puts("Failed to map VirtIO\n");
+            return;
+        }
+    }
+    
     // Map CLINT MMIO region (0x2000000)
     hal_uart_puts("Mapping CLINT MMIO\n");
     if (map_page(&kernel_page_table, 0x2000000, 0x2000000, PTE_KERNEL_DATA) != 0) {
