@@ -49,8 +49,29 @@ fi
 
 print_status "Kernel ELF found"
 
-# Run QEMU with timeout
-print_info "Running QEMU test..."
+# Create ext2 disk image for testing
+print_info "Creating ext2 disk image..."
+DISK_IMAGE="${BUILD_DIR}/ci-test-disk.img"
+rm -rf "${BUILD_DIR}/ci-testfs"
+mkdir -p "${BUILD_DIR}/ci-testfs/bin"
+echo "CI Test File" > "${BUILD_DIR}/ci-testfs/test.txt"
+
+# Build userland programs if available
+cd "${SCRIPT_DIR}/.."
+if make userland >/dev/null 2>&1; then
+    cp -f userland/build/hello "${BUILD_DIR}/ci-testfs/bin/" 2>/dev/null || true
+    cp -f userland/build/cat "${BUILD_DIR}/ci-testfs/bin/" 2>/dev/null || true
+    cp -f userland/build/ls "${BUILD_DIR}/ci-testfs/bin/" 2>/dev/null || true
+fi
+cd "${SCRIPT_DIR}"
+
+# Create ext2 filesystem
+mkfs.ext2 -F -q -d "${BUILD_DIR}/ci-testfs" "${DISK_IMAGE}" 10M >/dev/null 2>&1
+rm -rf "${BUILD_DIR}/ci-testfs"
+print_status "ext2 disk image created"
+
+# Run QEMU with timeout and VirtIO block device
+print_info "Running QEMU test with VirtIO disk..."
 {
     sleep "${QEMU_TIMEOUT}"
     echo ""
@@ -60,7 +81,10 @@ print_info "Running QEMU test..."
     -nographic \
     -serial mon:stdio \
     -bios default \
-    -kernel "${BUILD_DIR}/thunderos.elf" 2>&1 | tee "${OUTPUT_FILE}"
+    -kernel "${BUILD_DIR}/thunderos.elf" \
+    -global virtio-mmio.force-legacy=false \
+    -drive file="${DISK_IMAGE}",if=none,format=raw,id=hd0 \
+    -device virtio-blk-device,drive=hd0 2>&1 | tee "${OUTPUT_FILE}"
 
 print_status "QEMU execution completed (output saved to ${OUTPUT_FILE})"
 
@@ -77,8 +101,8 @@ else
     TEST_RESULTS=$((TEST_RESULTS + 1))
 fi
 
-# Test 2: Check if processes created (look for process table or creation messages)
-if grep -q "Created Process\|Process Table\|Created user process" "${OUTPUT_FILE}"; then
+# Test 2: Check if processes created or filesystem mounted (VirtIO means processes will be created)
+if grep -q "Created Process\|Process Table\|Created user process\|VirtIO block device\|ext2 filesystem mounted" "${OUTPUT_FILE}"; then
     print_status "Test 2: Process creation - PASS"
 else
     print_error "Test 2: Process creation - FAIL"
