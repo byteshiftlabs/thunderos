@@ -18,8 +18,15 @@
 #define SYS_GETPPID     10  // Get parent process ID
 #define SYS_KILL        11  // Send signal to process
 #define SYS_GETTIME     12  // Get system time (milliseconds since boot)
+#define SYS_OPEN        13  // Open file
+#define SYS_CLOSE       14  // Close file descriptor
+#define SYS_LSEEK       15  // Seek file position
+#define SYS_STAT        16  // Get file status
+#define SYS_MKDIR       17  // Create directory
+#define SYS_UNLINK      18  // Remove file
+#define SYS_RMDIR       19  // Remove directory
 
-#define SYSCALL_COUNT   13
+#define SYSCALL_COUNT   20
 
 // RISC-V Syscall ABI:
 // - Syscall number in a7 (x17)
@@ -50,5 +57,12 @@ uint64_t sys_yield(void);
 uint64_t sys_getppid(void);
 uint64_t sys_kill(int pid, int signal);
 uint64_t sys_gettime(void);
+uint64_t sys_open(const char *path, int flags, int mode);
+uint64_t sys_close(int fd);
+uint64_t sys_lseek(int fd, int64_t offset, int whence);
+uint64_t sys_stat(const char *path, void *statbuf);
+uint64_t sys_mkdir(const char *path, int mode);
+uint64_t sys_unlink(const char *path);
+uint64_t sys_rmdir(const char *path);
 
 #endif // SYSCALL_H

@@ -9,6 +9,7 @@
 #include "hal/hal_uart.h"
 #include "kernel/scheduler.h"
 #include "kernel/panic.h"
+#include "fs/vfs.h"
 #include <stdint.h>
 #include <stddef.h>
 
@@ -63,54 +64,6 @@ static int is_valid_user_pointer(const void *pointer, size_t length) {
 uint64_t sys_exit(int status) {
     process_exit(status);
     // Never reaches here
-    return 0;
-}
-
-/**
- * sys_write - Write data to a file descriptor
- * 
- * @param file_descriptor File descriptor (1 = stdout, 2 = stderr)
- * @param buffer Buffer to write from
- * @param byte_count Number of bytes to write
- * @return Number of bytes written, or -1 on error
- */
-uint64_t sys_write(int file_descriptor, const char *buffer, size_t byte_count) {
-    if (!is_valid_user_pointer(buffer, byte_count)) {
-        return SYSCALL_ERROR;
-    }
-    
-    if (file_descriptor != STDOUT_FD && file_descriptor != STDERR_FD) {
-        return SYSCALL_ERROR;
-    }
-    
-    // Use batch write for efficiency
-    int bytes_written = hal_uart_write(buffer, byte_count);
-    if (bytes_written != (int)byte_count) {
-        return SYSCALL_ERROR;
-    }
-    
-    return byte_count;
-}
-
-/**
- * sys_read - Read data from a file descriptor
- * 
- * @param file_descriptor File descriptor (0 = stdin)
- * @param buffer Buffer to read into
- * @param byte_count Maximum number of bytes to read
- * @return Number of bytes read, or -1 on error
- */
-uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
-    if (!is_valid_user_pointer(buffer, byte_count)) {
-        return SYSCALL_ERROR;
-    }
-    
-    if (file_descriptor != STDIN_FD) {
-        return SYSCALL_ERROR;
-    }
-    
-    // Not implemented yet - requires input buffering
-    // Return 0 (EOF) for now
     return 0;
 }
 
@@ -221,6 +174,297 @@ uint64_t sys_gettime(void) {
 }
 
 /**
+ * sys_open - Open a file
+ * 
+ * @param path File path
+ * @param flags Open flags (O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, etc.)
+ * @param mode File permissions (for O_CREAT)
+ * @return File descriptor on success, -1 on error
+ */
+uint64_t sys_open(const char *path, int flags, int mode) {
+    if (!is_valid_user_pointer(path, 1)) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Validate path length
+    size_t path_len = 0;
+    const char *p = path;
+    while (*p && path_len < 4096) {
+        p++;
+        path_len++;
+    }
+    
+    if (path_len == 0 || path_len >= 4096) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Convert flags to VFS flags
+    int vfs_flags = 0;
+    if ((flags & O_RDWR) == O_RDWR) {
+        vfs_flags = O_RDWR;
+    } else if (flags & O_WRONLY) {
+        vfs_flags = O_WRONLY;
+    } else {
+        vfs_flags = O_RDONLY;
+    }
+    
+    if (flags & O_CREAT) {
+        vfs_flags |= O_CREAT;
+    }
+    if (flags & O_TRUNC) {
+        vfs_flags |= O_TRUNC;
+    }
+    if (flags & O_APPEND) {
+        vfs_flags |= O_APPEND;
+    }
+    
+    int fd = vfs_open(path, vfs_flags);
+    if (fd < 0) {
+        return SYSCALL_ERROR;
+    }
+    
+    (void)mode; // TODO: Use mode for file permissions
+    return fd;
+}
+
+/**
+ * sys_close - Close a file descriptor
+ * 
+ * @param fd File descriptor to close
+ * @return 0 on success, -1 on error
+ */
+uint64_t sys_close(int fd) {
+    // Don't allow closing stdin/stdout/stderr
+    if (fd <= STDERR_FD) {
+        return SYSCALL_ERROR;
+    }
+    
+    int result = vfs_close(fd);
+    return (result == 0) ? SYSCALL_SUCCESS : SYSCALL_ERROR;
+}
+
+/**
+ * sys_read - Read data from a file descriptor
+ * 
+ * Enhanced version that supports both stdin and file descriptors
+ * 
+ * @param file_descriptor File descriptor
+ * @param buffer Buffer to read into
+ * @param byte_count Maximum number of bytes to read
+ * @return Number of bytes read, or -1 on error
+ */
+uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
+    if (!is_valid_user_pointer(buffer, byte_count)) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Handle stdin separately
+    if (file_descriptor == STDIN_FD) {
+        // Not implemented yet - requires input buffering
+        return 0;
+    }
+    
+    // Handle regular file descriptors
+    if (file_descriptor <= STDERR_FD) {
+        return SYSCALL_ERROR;
+    }
+    
+    int bytes_read = vfs_read(file_descriptor, buffer, byte_count);
+    if (bytes_read < 0) {
+        return SYSCALL_ERROR;
+    }
+    
+    return bytes_read;
+}
+
+/**
+ * sys_write - Write data to a file descriptor
+ * 
+ * Enhanced version that supports both stdout/stderr and file descriptors
+ * 
+ * @param file_descriptor File descriptor
+ * @param buffer Buffer to write from
+ * @param byte_count Number of bytes to write
+ * @return Number of bytes written, or -1 on error
+ */
+uint64_t sys_write(int file_descriptor, const char *buffer, size_t byte_count) {
+    if (!is_valid_user_pointer(buffer, byte_count)) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Handle stdout/stderr with UART
+    if (file_descriptor == STDOUT_FD || file_descriptor == STDERR_FD) {
+        int bytes_written = hal_uart_write(buffer, byte_count);
+        if (bytes_written != (int)byte_count) {
+            return SYSCALL_ERROR;
+        }
+        return byte_count;
+    }
+    
+    // Handle stdin (cannot write)
+    if (file_descriptor == STDIN_FD) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Handle regular file descriptors
+    int bytes_written = vfs_write(file_descriptor, buffer, byte_count);
+    if (bytes_written < 0) {
+        return SYSCALL_ERROR;
+    }
+    
+    return bytes_written;
+}
+
+/**
+ * sys_lseek - Seek file position
+ * 
+ * @param fd File descriptor
+ * @param offset Offset in bytes
+ * @param whence SEEK_SET, SEEK_CUR, or SEEK_END
+ * @return New file position, or -1 on error
+ */
+uint64_t sys_lseek(int fd, int64_t offset, int whence) {
+    // Don't allow seeking on stdin/stdout/stderr
+    if (fd <= STDERR_FD) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Convert whence to VFS whence
+    int vfs_whence;
+    switch (whence) {
+        case SEEK_SET:
+            vfs_whence = SEEK_SET;
+            break;
+        case SEEK_CUR:
+            vfs_whence = SEEK_CUR;
+            break;
+        case SEEK_END:
+            vfs_whence = SEEK_END;
+            break;
+        default:
+            return SYSCALL_ERROR;
+    }
+    
+    int64_t new_pos = vfs_seek(fd, offset, vfs_whence);
+    if (new_pos < 0) {
+        return SYSCALL_ERROR;
+    }
+    
+    return new_pos;
+}
+
+/**
+ * sys_stat - Get file status
+ * 
+ * @param path File path
+ * @param statbuf Buffer to store stat information (size and type)
+ * @return 0 on success, -1 on error
+ */
+uint64_t sys_stat(const char *path, void *statbuf) {
+    if (!is_valid_user_pointer(path, 1) || !is_valid_user_pointer(statbuf, 8)) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Validate path length
+    size_t path_len = 0;
+    const char *p = path;
+    while (*p && path_len < 4096) {
+        p++;
+        path_len++;
+    }
+    
+    if (path_len == 0 || path_len >= 4096) {
+        return SYSCALL_ERROR;
+    }
+    
+    uint32_t *stat_data = (uint32_t *)statbuf;
+    int result = vfs_stat(path, &stat_data[0], &stat_data[1]);
+    return (result == 0) ? SYSCALL_SUCCESS : SYSCALL_ERROR;
+}
+
+/**
+ * sys_mkdir - Create a directory
+ * 
+ * @param path Directory path
+ * @param mode Directory permissions
+ * @return 0 on success, -1 on error
+ */
+uint64_t sys_mkdir(const char *path, int mode) {
+    if (!is_valid_user_pointer(path, 1)) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Validate path length
+    size_t path_len = 0;
+    const char *p = path;
+    while (*p && path_len < 4096) {
+        p++;
+        path_len++;
+    }
+    
+    if (path_len == 0 || path_len >= 4096) {
+        return SYSCALL_ERROR;
+    }
+    
+    int result = vfs_mkdir(path, mode);
+    return (result == 0) ? SYSCALL_SUCCESS : SYSCALL_ERROR;
+}
+
+/**
+ * sys_unlink - Remove a file
+ * 
+ * @param path File path
+ * @return 0 on success, -1 on error
+ */
+uint64_t sys_unlink(const char *path) {
+    if (!is_valid_user_pointer(path, 1)) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Validate path length
+    size_t path_len = 0;
+    const char *p = path;
+    while (*p && path_len < 4096) {
+        p++;
+        path_len++;
+    }
+    
+    if (path_len == 0 || path_len >= 4096) {
+        return SYSCALL_ERROR;
+    }
+    
+    int result = vfs_unlink(path);
+    return (result == 0) ? SYSCALL_SUCCESS : SYSCALL_ERROR;
+}
+
+/**
+ * sys_rmdir - Remove a directory
+ * 
+ * @param path Directory path
+ * @return 0 on success, -1 on error
+ */
+uint64_t sys_rmdir(const char *path) {
+    if (!is_valid_user_pointer(path, 1)) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Validate path length
+    size_t path_len = 0;
+    const char *p = path;
+    while (*p && path_len < 4096) {
+        p++;
+        path_len++;
+    }
+    
+    if (path_len == 0 || path_len >= 4096) {
+        return SYSCALL_ERROR;
+    }
+    
+    int result = vfs_rmdir(path);
+    return (result == 0) ? SYSCALL_SUCCESS : SYSCALL_ERROR;
+}
+
+/**
  * syscall_handler - Main system call dispatcher
  * 
  * Called from trap handler when ECALL is executed from user mode.
@@ -283,6 +527,34 @@ uint64_t syscall_handler(uint64_t syscall_number,
             
         case SYS_GETTIME:
             return_value = sys_gettime();
+            break;
+            
+        case SYS_OPEN:
+            return_value = sys_open((const char *)argument0, (int)argument1, (int)argument2);
+            break;
+            
+        case SYS_CLOSE:
+            return_value = sys_close((int)argument0);
+            break;
+            
+        case SYS_LSEEK:
+            return_value = sys_lseek((int)argument0, (int64_t)argument1, (int)argument2);
+            break;
+            
+        case SYS_STAT:
+            return_value = sys_stat((const char *)argument0, (void *)argument1);
+            break;
+            
+        case SYS_MKDIR:
+            return_value = sys_mkdir((const char *)argument0, (int)argument1);
+            break;
+            
+        case SYS_UNLINK:
+            return_value = sys_unlink((const char *)argument0);
+            break;
+            
+        case SYS_RMDIR:
+            return_value = sys_rmdir((const char *)argument0);
             break;
             
         case SYS_FORK:
