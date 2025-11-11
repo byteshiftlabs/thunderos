@@ -44,6 +44,7 @@ SECTIONS
     .user_exception_test : {
         user_exception_start = .;
         *(.user_exception_test)
+        user_exception_end = .;
     }
     
     /DISCARD/ : {
