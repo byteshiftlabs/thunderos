@@ -5,3 +5,7 @@ build/
 *.dump
 .vscode/
 .DS_Store
+
+# Test output files
+tests/*_output.txt
+tests/*.log
