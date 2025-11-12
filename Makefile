@@ -65,7 +65,11 @@ QEMU := qemu-system-riscv64
 QEMU_FLAGS := -machine virt -m 128M -nographic -serial mon:stdio
 QEMU_FLAGS += -bios default
 
-.PHONY: all clean qemu debug
+# Filesystem image
+FS_IMG := $(BUILD_DIR)/fs.img
+FS_SIZE := 10M
+
+.PHONY: all clean qemu debug fs
 
 all: $(KERNEL_ELF) $(KERNEL_BIN)
 
@@ -96,36 +100,37 @@ $(BUILD_DIR)/%.o: %.S
 clean:
 	rm -rf $(BUILD_DIR)
 
+# Create ext2 filesystem image
+fs: $(FS_IMG)
+
+$(FS_IMG): userland
+	@echo "Creating ext2 filesystem image ($(FS_SIZE))..."
+	@rm -rf $(BUILD_DIR)/testfs
+	@mkdir -p $(BUILD_DIR)/testfs/bin
+	@echo "Hello from ThunderOS ext2 filesystem!" > $(BUILD_DIR)/testfs/test.txt
+	@echo "This is a sample file for testing." > $(BUILD_DIR)/testfs/README.txt
+	@cp userland/build/cat $(BUILD_DIR)/testfs/bin/cat 2>/dev/null || echo "⚠ cat not built"
+	@cp userland/build/ls $(BUILD_DIR)/testfs/bin/ls 2>/dev/null || echo "⚠ ls not built"
+	@cp userland/build/hello $(BUILD_DIR)/testfs/bin/hello 2>/dev/null || echo "⚠ hello not built"
+	@if command -v mkfs.ext2 >/dev/null 2>&1; then \
+		mkfs.ext2 -F -q -d $(BUILD_DIR)/testfs $(FS_IMG) $(FS_SIZE); \
+		rm -rf $(BUILD_DIR)/testfs; \
+		echo "✓ Filesystem created: $(FS_IMG)"; \
+	else \
+		echo "ERROR: mkfs.ext2 not found. Install e2fsprogs: sudo apt-get install e2fsprogs"; \
+		exit 1; \
+	fi
+
 userland:
 	@echo "Building userland programs..."
 	@chmod +x build_userland.sh
 	@./build_userland.sh
 
-qemu: $(KERNEL_ELF)
-	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF)
-
-qemu-blk: $(KERNEL_ELF)
-	@echo "Creating test disk image (10MB)..."
-	@dd if=/dev/zero of=$(BUILD_DIR)/test-disk.img bs=1M count=10 2>/dev/null || true
+qemu: $(KERNEL_ELF) $(FS_IMG)
+	@echo "Running ThunderOS with ext2 filesystem..."
 	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) \
 		-global virtio-mmio.force-legacy=false \
-		-drive file=$(BUILD_DIR)/test-disk.img,if=none,format=raw,id=hd0 \
-		-device virtio-blk-device,drive=hd0
-
-qemu-ext2: $(KERNEL_ELF) userland
-	@echo "Creating ext2 test disk image (10MB)..."
-	@rm -rf $(BUILD_DIR)/testfs
-	@mkdir -p $(BUILD_DIR)/testfs/bin
-	@echo "Hello from ext2 filesystem!" > $(BUILD_DIR)/testfs/test.txt
-	@cp userland/build/cat $(BUILD_DIR)/testfs/bin/cat 2>/dev/null || echo "Warning: cat not built"
-	@cp userland/build/ls $(BUILD_DIR)/testfs/bin/ls 2>/dev/null || echo "Warning: ls not built"
-	@cp userland/build/hello $(BUILD_DIR)/testfs/bin/hello 2>/dev/null || echo "Warning: hello not built"
-	@mkfs.ext2 -F -q -d $(BUILD_DIR)/testfs $(BUILD_DIR)/ext2-disk.img 10M
-	@rm -rf $(BUILD_DIR)/testfs
-	@echo "ext2 filesystem created with test.txt and /bin programs"
-	$(QEMU) $(QEMU_FLAGS) -kernel $(KERNEL_ELF) \
-		-global virtio-mmio.force-legacy=false \
-		-drive file=$(BUILD_DIR)/ext2-disk.img,if=none,format=raw,id=hd0 \
+		-drive file=$(FS_IMG),if=none,format=raw,id=hd0 \
 		-device virtio-blk-device,drive=hd0
 
 debug: $(KERNEL_ELF)
