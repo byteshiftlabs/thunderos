@@ -522,3 +522,11 @@ void virtio_blk_irq_handler(void)
     
     /* TODO: Process used buffers asynchronously */
 }
+
+/**
+ * Get the global VirtIO block device
+ */
+virtio_blk_device_t *virtio_blk_get_device(void)
+{
+    return g_blk_device;
+}

@@ -8,6 +8,8 @@
 #ifndef HAL_UART_H
 #define HAL_UART_H
 
+#include <stdint.h>
+
 /**
  * Initialize UART hardware
  * 
@@ -55,5 +57,19 @@ int hal_uart_write(const char *buffer, unsigned int count);
  * @return Character received from UART
  */
 char hal_uart_getc(void);
+
+/**
+ * Write a 32-bit unsigned integer as decimal to UART
+ * 
+ * @param value Value to write
+ */
+void hal_uart_put_uint32(uint32_t value);
+
+/**
+ * Write a 32-bit unsigned integer as hexadecimal to UART
+ * 
+ * @param value Value to write
+ */
+void hal_uart_put_hex(uint32_t value);
 
 #endif /* HAL_UART_H */
