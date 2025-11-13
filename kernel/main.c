@@ -23,8 +23,9 @@
 // Linker symbols (defined in kernel.ld)
 extern char _kernel_end[];
 
-// External test function
+// External test functions
 extern void test_memory_management(void);
+extern void test_virtio_blk_all(void);
 
 // Demo process functions
 void process_a(void *arg) {
@@ -175,6 +176,9 @@ void kernel_main(void) {
     
     // Run enhanced memory management tests
     test_memory_management();
+    
+    // Run VirtIO block device tests
+    test_virtio_blk_all();
     
     // Initialize process management
     process_init();
