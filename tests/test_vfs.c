@@ -234,8 +234,8 @@ void test_vfs_all(void) {
     test_vfs_path_resolution();
     test_vfs_multiple_fds();
     
-    /* Unmount filesystem */
-    ext2_unmount(&g_ext2_fs);
+    /* Don't unmount - leave filesystem mounted for syscall tests */
+    /* ext2_unmount(&g_ext2_fs); */
     
     /* Print summary */
     hal_uart_puts("\n========================================\n");
