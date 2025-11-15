@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     xz-utils \
     qemu-system-misc \
+    e2fsprogs \
     && rm -rf /var/lib/apt/lists/*
 
 # Download and install RISC-V GNU toolchain (bare-metal)

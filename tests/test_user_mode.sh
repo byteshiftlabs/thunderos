@@ -49,8 +49,29 @@ fi
 
 print_status "Kernel ELF found"
 
-# Run QEMU with timeout
-print_info "Running user mode test..."
+# Create ext2 disk image for testing
+print_info "Creating ext2 disk image..."
+DISK_IMAGE="${BUILD_DIR}/ci-usermode-disk.img"
+rm -rf "${BUILD_DIR}/ci-testfs"
+mkdir -p "${BUILD_DIR}/ci-testfs/bin"
+echo "User Mode Test File" > "${BUILD_DIR}/ci-testfs/test.txt"
+
+# Build userland programs if available
+cd "${SCRIPT_DIR}/.."
+if make userland >/dev/null 2>&1; then
+    cp -f userland/build/hello "${BUILD_DIR}/ci-testfs/bin/" 2>/dev/null || true
+    cp -f userland/build/cat "${BUILD_DIR}/ci-testfs/bin/" 2>/dev/null || true
+    cp -f userland/build/ls "${BUILD_DIR}/ci-testfs/bin/" 2>/dev/null || true
+fi
+cd "${SCRIPT_DIR}"
+
+# Create ext2 filesystem
+mkfs.ext2 -F -q -d "${BUILD_DIR}/ci-testfs" "${DISK_IMAGE}" 10M >/dev/null 2>&1
+rm -rf "${BUILD_DIR}/ci-testfs"
+print_status "ext2 disk image created"
+
+# Run QEMU with timeout and VirtIO block device
+print_info "Running user mode test with VirtIO disk..."
 {
     sleep "${QEMU_TIMEOUT}"
     echo ""
@@ -60,7 +81,10 @@ print_info "Running user mode test..."
     -nographic \
     -serial mon:stdio \
     -bios default \
-    -kernel "${BUILD_DIR}/thunderos.elf" 2>&1 | tee "${OUTPUT_FILE}"
+    -kernel "${BUILD_DIR}/thunderos.elf" \
+    -global virtio-mmio.force-legacy=false \
+    -drive file="${DISK_IMAGE}",if=none,format=raw,id=hd0 \
+    -device virtio-blk-device,drive=hd0 2>&1 | tee "${OUTPUT_FILE}"
 
 print_status "QEMU execution completed (output saved to ${OUTPUT_FILE})"
 
