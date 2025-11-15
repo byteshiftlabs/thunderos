@@ -24,9 +24,6 @@ static int read_block(void *device, uint32_t block_num, void *buffer, uint32_t b
         int ret = virtio_blk_read(sector + i, 
                                   (uint8_t *)buffer + (i * 512), 1);
         if (ret != 1) {
-            hal_uart_puts("ext2: Failed to read sector ");
-            hal_uart_put_uint32(sector + i);
-            hal_uart_puts("\n");
             return -1;
         }
     }
@@ -39,7 +36,6 @@ static int read_block(void *device, uint32_t block_num, void *buffer, uint32_t b
  */
 int ext2_mount(ext2_fs_t *fs, void *device) {
     if (!fs || !device) {
-        hal_uart_puts("ext2: Invalid parameters to ext2_mount\n");
         return -1;
     }
     
@@ -51,7 +47,6 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
     /* Allocate buffer for superblock (1024 bytes) */
     fs->superblock = (ext2_superblock_t *)kmalloc(EXT2_SUPERBLOCK_SIZE);
     if (!fs->superblock) {
-        hal_uart_puts("ext2: Failed to allocate superblock buffer\n");
         return -1;
     }
     
@@ -59,10 +54,17 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
     /* Sector 0 = bytes 0-511, Sector 1 = bytes 512-1023, Sector 2 = bytes 1024-1535 */
     uint8_t *sb_buffer = (uint8_t *)fs->superblock;
     
-    /* Read sector 2 (offset 1024) into first 512 bytes of superblock */
-    int ret = virtio_blk_read(2, sb_buffer, 1);
+    /* Read sector 0 first to see if device works */
+    int ret = virtio_blk_read(0, sb_buffer, 1);
     if (ret != 1) {
-        hal_uart_puts("ext2: Failed to read superblock sector 2\n");
+        kfree(fs->superblock);
+        fs->superblock = NULL;
+        return -1;
+    }
+    
+    /* Read sector 2 (offset 1024) into first 512 bytes of superblock */
+    ret = virtio_blk_read(2, sb_buffer, 1);
+    if (ret != 1) {
         kfree(fs->superblock);
         fs->superblock = NULL;
         return -1;
@@ -71,7 +73,6 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
     /* Read sector 3 (offset 1536) into second 512 bytes of superblock */
     ret = virtio_blk_read(3, sb_buffer + 512, 1);
     if (ret != 1) {
-        hal_uart_puts("ext2: Failed to read superblock sector 3\n");
         kfree(fs->superblock);
         fs->superblock = NULL;
         return -1;
@@ -79,9 +80,6 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
     
     /* Verify magic number */
     if (fs->superblock->s_magic != EXT2_SUPER_MAGIC) {
-        hal_uart_puts("ext2: Invalid magic number: 0x");
-        hal_uart_put_hex(fs->superblock->s_magic);
-        hal_uart_puts(" (expected 0xEF53)\n");
         kfree(fs->superblock);
         fs->superblock = NULL;
         return -1;
@@ -92,9 +90,6 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
     
     /* Validate block size */
     if (fs->block_size < EXT2_MIN_BLOCK_SIZE || fs->block_size > EXT2_MAX_BLOCK_SIZE) {
-        hal_uart_puts("ext2: Invalid block size: ");
-        hal_uart_put_uint32(fs->block_size);
-        hal_uart_puts("\n");
         kfree(fs->superblock);
         fs->superblock = NULL;
         return -1;
@@ -117,7 +112,6 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
     uint32_t gdt_size = gdt_blocks * fs->block_size;
     fs->group_desc = (ext2_group_desc_t *)kmalloc(gdt_size);
     if (!fs->group_desc) {
-        hal_uart_puts("ext2: Failed to allocate group descriptor table\n");
         kfree(fs->superblock);
         fs->superblock = NULL;
         return -1;
@@ -130,9 +124,6 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
                         (uint8_t *)fs->group_desc + (i * fs->block_size),
                         fs->block_size);
         if (ret != 0) {
-            hal_uart_puts("ext2: Failed to read group descriptor block ");
-            hal_uart_put_uint32(gdt_block + i);
-            hal_uart_puts("\n");
             kfree(fs->group_desc);
             kfree(fs->superblock);
             fs->group_desc = NULL;
@@ -141,7 +132,6 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
         }
     }
     
-    hal_uart_puts("ext2: Mounted filesystem successfully\n");
     return 0;
 }
 
@@ -166,6 +156,4 @@ void ext2_unmount(ext2_fs_t *fs) {
     fs->device = NULL;
     fs->num_groups = 0;
     fs->block_size = 0;
-    
-    hal_uart_puts("ext2: Unmounted filesystem\n");
 }
