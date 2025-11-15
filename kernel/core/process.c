@@ -702,7 +702,12 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     // Set sstatus for user mode return:
     // SPIE=1 (enable interrupts after sret)
     // SPP=0 (return to user mode, not supervisor)
-    proc->trap_frame->sstatus = (1 << 5);  // SPIE=1, SPP=0
+    // We need to preserve other bits from current sstatus, only modify SPP and SPIE
+    unsigned long sstatus;
+    asm volatile("csrr %0, sstatus" : "=r"(sstatus));
+    sstatus &= ~(1 << 8);  // Clear SPP (bit 8) = return to user mode
+    sstatus |= (1 << 5);   // Set SPIE (bit 5) = enable interrupts after sret
+    proc->trap_frame->sstatus = sstatus;
     
     // Setup kernel context for initial context switch
     kmemset(&proc->context, 0, sizeof(struct context));
@@ -751,6 +756,30 @@ void user_mode_entry_wrapper(void) {
     // When trap occurs in user mode, sscratch will swap with sp
     uintptr_t kernel_sp = proc->kernel_stack + KERNEL_STACK_SIZE;
     __asm__ volatile("csrw sscratch, %0" :: "r"(kernel_sp));
+    
+    // DEBUG: Verify sscratch was set
+    uintptr_t verify_sscratch;
+    __asm__ volatile("csrr %0, sscratch" : "=r"(verify_sscratch));
+    hal_uart_puts("[DEBUG] sscratch set to: 0x");
+    char buf[20];
+    for (int i = 15; i >= 0; i--) {
+        int nibble = (verify_sscratch >> (i * 4)) & 0xF;
+        buf[15 - i] = nibble < 10 ? '0' + nibble : 'a' + nibble - 10;
+    }
+    buf[16] = '\n';
+    buf[17] = '\0';
+    hal_uart_puts(buf);
+    
+    // DEBUG: Check trap_frame->sp value
+    hal_uart_puts("[DEBUG] trap_frame->sp = 0x");
+    uintptr_t tf_sp = proc->trap_frame->sp;
+    for (int i = 15; i >= 0; i--) {
+        int nibble = (tf_sp >> (i * 4)) & 0xF;
+        buf[15 - i] = nibble < 10 ? '0' + nibble : 'a' + nibble - 10;
+    }
+    buf[16] = '\n';
+    buf[17] = '\0';
+    hal_uart_puts(buf);
     
     // Enter user mode - never returns (continues in user code or via trap)
     user_return(proc->trap_frame);
