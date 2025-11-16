@@ -9,3 +9,4 @@ build/
 # Test output files
 tests/*_output.txt
 tests/*.log
+tests/outputs/

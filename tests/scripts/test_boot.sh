@@ -13,8 +13,12 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${SCRIPT_DIR}/../.."
 BUILD_DIR="${ROOT_DIR}/build"
-OUTPUT_FILE="${SCRIPT_DIR}/../outputs/boot_test_output.txt"
+OUTPUT_DIR="${SCRIPT_DIR}/../outputs"
+OUTPUT_FILE="${OUTPUT_DIR}/boot_test_output.txt"
 QEMU_TIMEOUT=5
+
+# Create output directory if it doesn't exist
+mkdir -p "${OUTPUT_DIR}"
 
 # Colors
 GREEN='\033[0;32m'
