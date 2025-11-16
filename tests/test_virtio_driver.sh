@@ -41,6 +41,7 @@ timeout 10s qemu-system-riscv64 \
     -serial mon:stdio \
     -bios default \
     -kernel build/thunderos.elf \
+    -global virtio-mmio.force-legacy=false \
     -drive file=build/test-disk.img,if=none,format=raw,id=hd0 \
     -device virtio-blk-device,drive=hd0 \
     || true

@@ -128,7 +128,7 @@ $(PANIC_OBJ): $(KERNEL_DIR)/core/panic.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(KSTRING_OBJ): $(KERNEL_DIR)/core/kstring.c
+$(KSTRING_OBJ): $(KERNEL_DIR)/utils/kstring.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
