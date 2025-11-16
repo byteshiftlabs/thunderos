@@ -11,6 +11,7 @@
 #include <mm/kmalloc.h>
 #include <arch/barrier.h>
 #include <hal/hal_uart.h>
+#include <kernel/errno.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -50,7 +51,7 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
     /* Allocate descriptor ring using DMA allocator */
     dma_region_t *desc_region = dma_alloc(desc_size, DMA_ZERO);
     if (!desc_region) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
     vq->desc = (virtq_desc_t *)desc_region->virt_addr;
     vq->desc_phys = desc_region->phys_addr;
@@ -59,7 +60,7 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
     dma_region_t *avail_region = dma_alloc(avail_size, DMA_ZERO);
     if (!avail_region) {
         dma_free(desc_region);
-        return -1;
+        RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
     vq->avail = (virtq_avail_t *)avail_region->virt_addr;
     vq->avail_phys = avail_region->phys_addr;
@@ -69,7 +70,7 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
     if (!used_region) {
         dma_free(desc_region);
         dma_free(avail_region);
-        return -1;
+        RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
     vq->used = (virtq_used_t *)used_region->virt_addr;
     vq->used_phys = used_region->phys_addr;
@@ -100,6 +101,7 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
     /* Mark queue as ready */
     VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_READY, 1);
     
+    clear_errno();
     return 0;
 }
 
@@ -109,7 +111,7 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
 static int virtqueue_alloc_desc_chain(virtqueue_t *vq, uint16_t *desc_idx, uint32_t count)
 {
     if (vq->num_free < count) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EBUSY);
     }
     
     *desc_idx = vq->free_head;
@@ -122,6 +124,7 @@ static int virtqueue_alloc_desc_chain(virtqueue_t *vq, uint16_t *desc_idx, uint3
     vq->free_head = current;
     vq->num_free -= count;
     
+    clear_errno();
     return 0;
 }
 
@@ -222,7 +225,7 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
     
     if (header_phys == 0 || data_phys == 0 || status_phys == 0) {
         virtqueue_free_desc_chain(vq, desc_idx);
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EIO);
     }
     
     /* Descriptor 0: Request header (device reads) */
@@ -273,9 +276,10 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
             virtqueue_free_desc_chain(vq, used_idx);
             
             if (req->status != VIRTIO_BLK_S_OK) {
-                return -1;
+                RETURN_ERRNO(THUNDEROS_EIO);
             }
             
+            clear_errno();
             return sectors;
         }
         timeout--;
@@ -283,7 +287,7 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
     
     /* Request timed out */
     virtqueue_free_desc_chain(vq, desc_idx);
-    return -1;
+    RETURN_ERRNO(THUNDEROS_EVIRTIO_TIMEOUT);
 }
 
 /**
@@ -294,7 +298,7 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
     /* Allocate device structure */
     g_blk_device = (virtio_blk_device_t *)kmalloc(sizeof(virtio_blk_device_t));
     if (!g_blk_device) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
     
     g_blk_device->base_addr = base_addr;
@@ -308,7 +312,7 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
     if (magic != VIRTIO_MAGIC) {
         kfree(g_blk_device);
         g_blk_device = NULL;
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_BADDEV);
     }
     
     /* Check device version and ID */
@@ -319,7 +323,7 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
     if (g_blk_device->device_id != VIRTIO_DEVICE_ID_BLOCK) {
         kfree(g_blk_device);
         g_blk_device = NULL;
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_BADDEV);
     }
     
     /* Reset device */
@@ -353,7 +357,7 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
     if (!(status & VIRTIO_STATUS_FEATURES_OK)) {
         kfree(g_blk_device);
         g_blk_device = NULL;
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_BADDEV);
     }
     
     /* Read device configuration */
@@ -371,6 +375,7 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
     if (virtqueue_init(g_blk_device, queue_size) < 0) {
         kfree(g_blk_device);
         g_blk_device = NULL;
+        /* errno already set by virtqueue_init */
         return -1;
     }
     
@@ -383,9 +388,10 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
     if (!(final_status & VIRTIO_STATUS_DRIVER_OK)) {
         kfree(g_blk_device);
         g_blk_device = NULL;
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_BADDEV);
     }
     
+    clear_errno();
     return 0;
 }
 
@@ -395,17 +401,17 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
 int virtio_blk_read(uint64_t sector, void *buffer, uint32_t count)
 {
     if (!g_blk_device) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_NODEV);
     }
     
     if (sector + count > g_blk_device->capacity) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EINVAL);
     }
     
     /* Allocate request structure from DMA memory (device needs to write status) */
     dma_region_t *req_region = dma_alloc(sizeof(virtio_blk_request_t), DMA_ZERO);
     if (!req_region) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
     
     virtio_blk_request_t *req = (virtio_blk_request_t *)req_region->virt_addr;
@@ -415,8 +421,10 @@ int virtio_blk_read(uint64_t sector, void *buffer, uint32_t count)
     
     if (result > 0) {
         g_blk_device->read_count++;
+        clear_errno();
     } else {
         g_blk_device->error_count++;
+        /* errno already set by virtio_blk_do_request */
     }
     
     return result;
@@ -428,21 +436,21 @@ int virtio_blk_read(uint64_t sector, void *buffer, uint32_t count)
 int virtio_blk_write(uint64_t sector, const void *buffer, uint32_t count)
 {
     if (!g_blk_device) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_NODEV);
     }
     
     if (g_blk_device->read_only) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EFS_RDONLY);
     }
     
     if (sector + count > g_blk_device->capacity) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EINVAL);
     }
     
     /* Allocate request structure from DMA memory */
     dma_region_t *req_region = dma_alloc(sizeof(virtio_blk_request_t), DMA_ZERO);
     if (!req_region) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
     
     virtio_blk_request_t *req = (virtio_blk_request_t *)req_region->virt_addr;
@@ -452,8 +460,10 @@ int virtio_blk_write(uint64_t sector, const void *buffer, uint32_t count)
     
     if (result > 0) {
         g_blk_device->write_count++;
+        clear_errno();
     } else {
         g_blk_device->error_count++;
+        /* errno already set by virtio_blk_do_request */
     }
     
     return result;
@@ -465,15 +475,18 @@ int virtio_blk_write(uint64_t sector, const void *buffer, uint32_t count)
 int virtio_blk_flush(void)
 {
     if (!g_blk_device) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_NODEV);
     }
     
     if (!(g_blk_device->features & VIRTIO_BLK_F_FLUSH)) {
+        clear_errno();
         return 0;
     }
     
     virtio_blk_request_t req;
-    return virtio_blk_do_request(g_blk_device, &req, 0, NULL, 0, VIRTIO_BLK_T_FLUSH);
+    int result = virtio_blk_do_request(g_blk_device, &req, 0, NULL, 0, VIRTIO_BLK_T_FLUSH);
+    /* errno already set by virtio_blk_do_request if failed */
+    return result;
 }
 
 /**
