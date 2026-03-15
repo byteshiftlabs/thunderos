@@ -309,46 +309,49 @@ void paging_init(uintptr_t kernel_start, uintptr_t kernel_end) {
 static void free_page_table_recursive(page_table_t *pt, int level) {
     if (!pt) return;
     
-    // For non-leaf levels, recursively free child page tables
-    if (level > 0) {
-        // At level 2 (top level), only free user space entries (VPN[2] = 0-1)
-        // Kernel space entries (VPN[2] = 2-511) are shared with kernel page table
-        // and must NOT be freed
-        int end_index = (level == 2) ? 2 : PT_ENTRIES;
+    // At level 2 (top level), only process user space entries (VPN[2] = 0-1)
+    // Kernel space entries (VPN[2] = 2-511) are shared with kernel page table
+    // and must NOT be freed
+    int end_index = (level == 2) ? 2 : PT_ENTRIES;
+    
+    for (int i = 0; i < end_index; i++) {
+        pte_t pte = pt->entries[i];
         
-        for (int i = 0; i < end_index; i++) {
-            pte_t pte = pt->entries[i];
-            
-            // Skip invalid entries
-            if (!(pte & PTE_V)) {
-                continue;
+        // Skip invalid entries
+        if (!(pte & PTE_V)) {
+            continue;
+        }
+        
+        uintptr_t pa = PTE_TO_PA(pte);
+        
+        if (PTE_IS_LEAF(pte)) {
+            // Leaf PTE — points to a physical data page.
+            // Free only user-owned pages (PTE_U set).
+            // Kernel identity-mapped pages never have PTE_U.
+            if (pte & PTE_U) {
+                pmm_free_page(pa);
             }
-            
-            // Skip leaf entries (they shouldn't exist at non-leaf levels in Sv39,
-            // but check anyway to avoid corrupting memory)
-            if (PTE_IS_LEAF(pte)) {
-                continue;
-            }
-            
-            // Get physical address of child page table
-            uintptr_t child_pa = PTE_TO_PA(pte);
-            page_table_t *child_pt = (page_table_t *)child_pa;
-            
-            // Recursively free child
-            free_page_table_recursive(child_pt, level - 1);
+        } else if (level > 0) {
+            // Non-leaf PTE — points to a child page table.
+            // Recurse into it, then it will be freed below.
+            free_page_table_recursive((page_table_t *)pa, level - 1);
         }
     }
     
-    // Free this page table itself
+    // Free this page table page itself
     pmm_free_page((uintptr_t)pt);
 }
 
 /**
- * Free a page table and all its child page tables
+ * Free a page table, its child page tables, and all user-owned leaf pages
  * 
- * This function walks the entire page table hierarchy and frees all
- * allocated page table pages. It does NOT free the actual data pages
- * mapped by the page table - those should be freed separately.
+ * Walks the entire page table hierarchy and frees:
+ * - All intermediate page table pages (levels 0-2)
+ * - All leaf (data) pages marked with PTE_U (user-owned)
+ * 
+ * Kernel identity-mapped pages (without PTE_U) are not freed.
+ * Only user-space entries (VPN[2] = 0-1) are processed; kernel-space
+ * entries (VPN[2] = 2-511) are shared and left untouched.
  * 
  * WARNING: Do not call this on the kernel page table!
  * 
@@ -408,7 +411,7 @@ page_table_t *create_user_page_table(void) {
     // After switching to user page table, kernel trap handlers still need
     // to access UART for debug output and logging
     if (map_page(user_pt, QEMU_UART0_BASE, QEMU_UART0_BASE, PTE_KERNEL_DATA) != 0) {
-        kfree(user_pt);
+        free_page_table(user_pt);
         return NULL;
     }
     
@@ -416,7 +419,7 @@ page_table_t *create_user_page_table(void) {
     // Kernel needs this during syscalls that access filesystem and graphics
     for (uintptr_t addr = QEMU_VIRTIO_BASE; addr <= QEMU_VIRTIO_END; addr += QEMU_VIRTIO_STRIDE) {
         if (map_page(user_pt, addr, addr, PTE_KERNEL_DATA) != 0) {
-            kfree(user_pt);
+            free_page_table(user_pt);
             return NULL;
         }
     }
@@ -424,7 +427,7 @@ page_table_t *create_user_page_table(void) {
     // Map CLINT MMIO region for timer and interrupt handling
     // Supervisor mode needs this for IPI and scheduling timer management
     if (map_page(user_pt, QEMU_CLINT_BASE, QEMU_CLINT_BASE, PTE_KERNEL_DATA) != 0) {
-        kfree(user_pt);
+        free_page_table(user_pt);
         return NULL;
     }
     
