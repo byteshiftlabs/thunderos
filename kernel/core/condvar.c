@@ -12,6 +12,7 @@
 #include "kernel/process.h"
 #include "kernel/scheduler.h"
 #include "kernel/errno.h"
+#include "mm/kmalloc.h"
 #include "arch/interrupt.h"
 
 /**
@@ -34,12 +35,17 @@ void cond_init(condvar_t *cv) {
  *
  * This is the core condition variable operation. It performs the following
  * atomic sequence:
- * 1. Unlock the provided mutex
- * 2. Put the calling process to sleep on the condition variable's wait queue
- * 3. When awakened, re-acquire the mutex before returning
+ * 1. Add the calling process to the CV wait queue
+ * 2. Unlock the provided mutex
+ * 3. Put the calling process to sleep
+ * 4. When awakened, re-acquire the mutex before returning
  *
- * The atomicity is crucial to avoid the "lost wakeup" problem where a signal
- * arrives between unlocking the mutex and sleeping.
+ * Steps 1-3 execute with interrupts disabled so that no signal can arrive
+ * between unlocking the mutex and sleeping (the "lost wakeup" problem).
+ *
+ * The wait queue logic is inlined rather than calling wait_queue_sleep()
+ * because we need the enqueue to happen BEFORE the mutex unlock, but all
+ * under a single interrupt-disable region.
  *
  * @param cv Pointer to condition variable to wait on
  * @param mutex Pointer to mutex associated with this condition (must be locked)
@@ -49,38 +55,59 @@ void cond_wait(condvar_t *cv, mutex_t *mutex) {
         return;
     }
     
+    struct process *current = process_current();
+    if (!current) {
+        return;
+    }
+    
     uint64_t flags = interrupt_save_disable();
     
-    /* 
-     * Atomically unlock the mutex and add ourselves to the wait queue.
-     * This is the critical section that prevents lost wakeups.
+    /*
+     * Step 1: Enqueue ourselves on the CV wait queue FIRST.
+     * After this point, any cond_signal/cond_broadcast will find us.
      */
+    wait_queue_entry_t *entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
+    if (!entry) {
+        interrupt_restore(flags);
+        return;
+    }
+    entry->proc = current;
+    entry->next = NULL;
     
-    /* Unlock the mutex - this allows other processes to proceed */
+    if (cv->waiters.tail) {
+        cv->waiters.tail->next = entry;
+        cv->waiters.tail = entry;
+    } else {
+        cv->waiters.head = entry;
+        cv->waiters.tail = entry;
+    }
+    cv->waiters.count++;
+    
+    /*
+     * Step 2: Unlock the mutex.
+     * We're already on the wait queue, so any signal arriving after this
+     * unlock will find and wake us — no lost wakeup possible.
+     */
     mutex->locked = MUTEX_UNLOCKED;
     mutex->owner_pid = -1;
-    
-    /* Wake one process waiting on the mutex (if any) */
     wait_queue_wake(&mutex->waiters);
     
-    /* 
-     * Now sleep on the condition variable.
-     * We're still holding interrupts disabled, so no wakeup can be lost.
-     * The wait_queue_sleep function will restore interrupts and yield.
+    /*
+     * Step 3: Mark ourselves as sleeping and yield.
+     * Still under the same interrupt-disable region.
      */
+    current->state = PROC_SLEEPING;
+    scheduler_dequeue(current);
+    
     interrupt_restore(flags);
-    wait_queue_sleep(&cv->waiters);
+    schedule();
     
-    /* 
-     * We've been awakened! Now we need to re-acquire the mutex.
-     * This blocks if another process has taken it.
-     */
-    mutex_lock(mutex);
-    
-    /* 
-     * Mutex is now locked, we can return to the caller.
+    /*
+     * We've been woken up (entry was freed by the wake function).
+     * Re-acquire the mutex before returning to the caller.
      * The caller should re-check the condition in a while loop.
      */
+    mutex_lock(mutex);
 }
 
 /**
@@ -103,7 +130,7 @@ void cond_signal(condvar_t *cv) {
     uint64_t flags = interrupt_save_disable();
     
     /* Wake one waiting process (if any) */
-    wait_queue_wake(&cv->waiters);
+    wait_queue_wake_one(&cv->waiters);
     
     interrupt_restore(flags);
 }
