@@ -115,6 +115,14 @@ void signal_handle(struct process *proc, int signum);
 void signal_handle_with_frame(struct process *proc, int signum, struct trap_frame *trap_frame);
 
 /**
+ * Restore user context after signal handler completes (SYS_SIGRETURN)
+ *
+ * @param tf Current trap frame (overwritten with saved context)
+ * @return 0 on success, -1 if no saved context
+ */
+uint64_t sys_sigreturn_with_frame(struct trap_frame *tf);
+
+/**
  * Set signal handler
  * 
  * @param proc Process to set handler for

@@ -136,6 +136,7 @@ struct process {
     sigset_t pending_signals;           // Pending signals (bitmask)
     sigset_t blocked_signals;           // Blocked signals (bitmask)
     sighandler_t signal_handlers[NSIG]; // Signal handler functions
+    struct trap_frame *saved_signal_context; // Saved user context during signal handler execution
     
     // Current working directory
     char cwd[256];                      // Current working directory path

@@ -7,6 +7,8 @@
 #include "kernel/errno.h"
 #include "kernel/constants.h"
 #include "kernel/kstring.h"
+#include "kernel/syscall.h"
+#include "mm/kmalloc.h"
 #include "hal/hal_uart.h"
 
 // External process functions
@@ -28,6 +30,7 @@ void signal_init_process(struct process *proc) {
     
     proc->pending_signals = 0;
     proc->blocked_signals = 0;
+    proc->saved_signal_context = NULL;
     
     // Set all handlers to default
     for (int i = 0; i < NSIG; i++) {
@@ -341,20 +344,76 @@ void signal_handle_with_frame(struct process *proc, int signum, struct trap_fram
         // Ignore the signal
         return;
     } else {
-        // User-defined handler - modify trap frame to execute handler
+        // User-defined handler — set up signal frame for proper context restoration
         if (trap_frame) {
-            // Save the return address: when handler executes 'ret', 
-            // it will return to the interrupted instruction
-            trap_frame->ra = trap_frame->sepc;
+            /*
+             * Save the entire interrupted context in kernel memory so that
+             * sys_sigreturn can restore it.  Nested signals are not supported:
+             * if a signal is already being handled, the new one is silently
+             * dropped (the context would be overwritten otherwise).
+             */
+            if (proc->saved_signal_context) {
+                // Already handling a signal — drop this one
+                return;
+            }
             
-            // Redirect execution to the signal handler
-            trap_frame->sepc = (unsigned long)handler;
-            trap_frame->a0 = signum;  // Pass signal number as argument
+            proc->saved_signal_context = (struct trap_frame *)kmalloc(sizeof(struct trap_frame));
+            if (!proc->saved_signal_context) {
+                // Out of memory — can't deliver, leave pending
+                return;
+            }
+            kmemcpy(proc->saved_signal_context, trap_frame, sizeof(struct trap_frame));
             
-            // TODO: Implement full signal frame with sigreturn for proper context restoration
-            // This simple approach works for handlers that end with 'ret'
+            /*
+             * Write a small sigreturn trampoline on the user stack:
+             *
+             *   li  a7, SYS_SIGRETURN   →  0x01700893  (addi a7, x0, 23)
+             *   ecall                    →  0x00000073
+             *
+             * The handler's 'ret' will jump here, executing the sigreturn
+             * syscall which restores the saved context.
+             */
+            unsigned long trampoline_sp = (trap_frame->sp - 8) & ~0xFUL; // 16-byte aligned
+            unsigned int *trampoline = (unsigned int *)trampoline_sp;
+            trampoline[0] = 0x01700893; // li a7, 23 (SYS_SIGRETURN)
+            trampoline[1] = 0x00000073; // ecall
+            
+            // Set up the trap frame to run the signal handler
+            trap_frame->ra = trampoline_sp;           // handler return → trampoline
+            trap_frame->sp = trampoline_sp;            // adjusted stack below trampoline
+            trap_frame->sepc = (unsigned long)handler; // jump to handler
+            trap_frame->a0 = signum;                   // signal number as first argument
         }
     }
+}
+
+/**
+ * Restore user context after signal handler completes
+ *
+ * Called from the SYS_SIGRETURN syscall.  Copies the saved pre-signal
+ * trap frame back over the current trap frame, discarding the handler's
+ * register state.
+ *
+ * @param tf  Current trap frame (will be overwritten)
+ * @return 0 on success, -1 if no saved context exists
+ */
+uint64_t sys_sigreturn_with_frame(struct trap_frame *tf) {
+    struct process *proc = process_current();
+    if (!proc || !proc->saved_signal_context) {
+        set_errno(THUNDEROS_EINVAL);
+        return (uint64_t)-1;
+    }
+    
+    kmemcpy(tf, proc->saved_signal_context, sizeof(struct trap_frame));
+    kfree(proc->saved_signal_context);
+    proc->saved_signal_context = NULL;
+    
+    /*
+     * Return value is irrelevant — the restored trap frame already has
+     * the correct a0 from before the signal was delivered.
+     * The trap handler must NOT overwrite tf->a0 after this call.
+     */
+    return 0;
 }
 
 

@@ -93,6 +93,12 @@ static void handle_exception(struct trap_frame *tf, unsigned long cause) {
             return;
         }
         
+        // Special case: sigreturn - trap frame restored to pre-signal state
+        // Don't modify a0 or advance sepc
+        if (syscall_num == SYS_SIGRETURN) {
+            return;
+        }
+        
         // Store return value in a0
         tf->a0 = ret;
         

@@ -10,6 +10,7 @@
 #include "kernel/condvar.h"
 #include "kernel/rwlock.h"
 #include "kernel/constants.h"
+#include "kernel/signal.h"
 #include "hal/hal_timer.h"
 #include "mm/paging.h"
 #include "kernel/process.h"
@@ -1850,6 +1851,13 @@ uint64_t syscall_handler_with_frame(struct trap_frame *tf,
     // For execve, we need to pass the trap frame to update sepc
     if (syscall_number == SYS_EXECVE) {
         return sys_execve_with_frame(tf, (const char *)argument0, (const char **)argument1, (const char **)argument2);
+    }
+    
+    // For sigreturn, restore saved context into trap frame.
+    // Return value is ignored — the restored tf already has the correct a0.
+    if (syscall_number == SYS_SIGRETURN) {
+        sys_sigreturn_with_frame(tf);
+        return tf->a0;  // Return the restored a0 (trap handler will overwrite a0 with this)
     }
     
     // For all other syscalls, use the normal handler
