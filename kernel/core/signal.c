@@ -10,6 +10,7 @@
 #include "kernel/syscall.h"
 #include "mm/kmalloc.h"
 #include "hal/hal_uart.h"
+#include "arch/interrupt.h"
 
 // External process functions
 extern struct process *process_current(void);
@@ -96,8 +97,11 @@ int signal_send(struct process *proc, int signum) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
     
+    int old_state = interrupt_save_disable();
+    
     // Can't send signals to UNUSED or ZOMBIE processes
     if (proc->state == PROC_UNUSED || proc->state == PROC_ZOMBIE) {
+        interrupt_restore(old_state);
         RETURN_ERRNO(THUNDEROS_ESRCH);
     }
     
@@ -105,6 +109,7 @@ int signal_send(struct process *proc, int signum) {
     // because a stopped process won't return to usermode to receive the signal
     if (signum == SIGCONT && proc->state == PROC_STOPPED) {
         signal_default_cont(proc);
+        interrupt_restore(old_state);
         // Don't mark as pending - it's already handled
         clear_errno();
         return 0;
@@ -119,6 +124,7 @@ int signal_send(struct process *proc, int signum) {
         process_wakeup(proc);
     }
     
+    interrupt_restore(old_state);
     clear_errno();
     return 0;
 }
@@ -360,7 +366,8 @@ void signal_handle_with_frame(struct process *proc, int signum, struct trap_fram
             
             proc->saved_signal_context = (struct trap_frame *)kmalloc(sizeof(struct trap_frame));
             if (!proc->saved_signal_context) {
-                // Out of memory — can't deliver, leave pending
+                // Out of memory — re-pend for later delivery
+                proc->pending_signals |= (1UL << signum);
                 return;
             }
             kmemcpy(proc->saved_signal_context, trap_frame, sizeof(struct trap_frame));

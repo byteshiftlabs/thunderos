@@ -29,19 +29,26 @@ static int shell_strcmp(const char *s1, const char *s2) {
 }
 
 /**
- * Concatenate two strings
+ * Concatenate two strings with bounds checking
  * 
  * @param destination Destination string buffer
  * @param source Source string to append
+ * @param dest_size Total size of destination buffer
  * @return Pointer to destination string
  */
-static char *shell_strcat(char *destination, const char *source) {
+static char *shell_strcat(char *destination, const char *source, size_t dest_size) {
     char *dest_ptr = destination;
-    while (*dest_ptr) {
+    size_t dest_len = 0;
+    while (*dest_ptr && dest_len < dest_size) {
         dest_ptr++;
+        dest_len++;
     }
-    while ((*dest_ptr++ = *source++)) {
-        /* Copy until null terminator */
+    while (*source && dest_len + 1 < dest_size) {
+        *dest_ptr++ = *source++;
+        dest_len++;
+    }
+    if (dest_len < dest_size) {
+        *dest_ptr = '\0';
     }
     return destination;
 }
@@ -281,8 +288,8 @@ static void shell_execute(char *command_line) {
         /* Try to execute as external program from /bin directory */
         char program_path[SHELL_PATH_BUFFER_SIZE];
         program_path[0] = '\0';
-        shell_strcat(program_path, "/bin/");
-        shell_strcat(program_path, argument_vector[0]);
+        shell_strcat(program_path, "/bin/", sizeof(program_path));
+        shell_strcat(program_path, argument_vector[0], sizeof(program_path));
         
         shell_exec_program(program_path, argument_count, argument_vector);
     }

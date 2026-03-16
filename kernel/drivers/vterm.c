@@ -612,6 +612,12 @@ char vterm_process_input(char c)
     
     /* Simple Alt+number detection: ESC followed by 1-6 */
     if (g_input_state.in_escape) {
+        /* Bounds check: abort escape if buffer is full */
+        if (g_input_state.escape_len >= (int)sizeof(g_input_state.escape_buf)) {
+            g_input_state.in_escape = 0;
+            g_input_state.escape_len = 0;
+            return c;
+        }
         g_input_state.escape_buf[g_input_state.escape_len++] = c;
         
         /* Alt+1 through Alt+6 (ESC + digit) */

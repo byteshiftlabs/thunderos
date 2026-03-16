@@ -59,7 +59,9 @@ static void init_memory(void);
 static int init_block_device(void);
 static int init_gpu_device(void);
 static int init_filesystem(void);
+#ifndef TEST_MODE
 static void launch_shell(void);
+#endif
 static void halt_cpu(void);
 
 #ifdef ENABLE_KERNEL_TESTS
@@ -301,6 +303,7 @@ static int init_filesystem(void) {
     return 0;
 }
 
+#ifndef TEST_MODE
 /*
  * Launch a shell on a specific virtual terminal.
  * Returns the PID of the launched shell, or -1 on error.
@@ -361,6 +364,7 @@ static void launch_shell(void) {
         hal_uart_puts("[INFO] Shell on VT1 exited\n");
     }
 }
+#endif
 
 /*
  * Halt the CPU in an infinite loop.

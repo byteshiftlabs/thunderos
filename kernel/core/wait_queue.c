@@ -32,10 +32,14 @@ void wait_queue_init(wait_queue_t *wq) {
  * The scheduler will not run this process until it's woken up.
  */
 int wait_queue_sleep(wait_queue_t *wq) {
-    if (!wq) return -1;
+    if (!wq) {
+        set_errno(THUNDEROS_EINVAL);
+        return -1;
+    }
     
     struct process *current = process_current();
     if (!current) {
+        set_errno(THUNDEROS_EINVAL);
         return -1;
     }
     
@@ -47,6 +51,7 @@ int wait_queue_sleep(wait_queue_t *wq) {
     if (!entry) {
         // Failed to allocate - yield to prevent busy-spin, let caller retry
         interrupt_restore(old_state);
+        set_errno(THUNDEROS_ENOMEM);
         schedule();
         return -1;
     }

@@ -143,6 +143,7 @@ static vfs_node_t *ext2_vfs_lookup(vfs_node_t *dir, const char *name) {
     node->fs_data = inode;
     node->ops = &ext2_vfs_ops;
     
+    clear_errno();
     return node;
 }
 

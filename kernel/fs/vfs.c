@@ -404,6 +404,7 @@ vfs_node_t *vfs_resolve_path(const char *path) {
         }
     }
     
+    clear_errno();
     return current_node;
 }
 
@@ -485,6 +486,8 @@ int vfs_open(const char *path, uint32_t flags, uint32_t mode) {
     int fd = vfs_alloc_fd();
     if (fd < 0) {
         hal_uart_puts("vfs: No free file descriptors\n");
+        if (node->fs_data) kfree(node->fs_data);
+        kfree(node);
         /* errno already set by vfs_alloc_fd */
         return -1;
     }
@@ -498,7 +501,10 @@ int vfs_open(const char *path, uint32_t flags, uint32_t mode) {
     if (node->ops && node->ops->open) {
         int ret = node->ops->open(node, flags);
         if (ret != 0) {
+            g_file_table[fd].node = NULL;
             vfs_free_fd(fd);
+            if (node->fs_data) kfree(node->fs_data);
+            kfree(node);
             /* errno already set by open */
             return -1;
         }
@@ -548,6 +554,14 @@ int vfs_close(int fd) {
     /* Call filesystem close if available */
     if (file->node && file->node->ops && file->node->ops->close) {
         file->node->ops->close(file->node);
+    }
+    
+    /* Free the vfs_node and its fs_data (allocated by ext2_vfs_lookup) */
+    if (file->node) {
+        if (file->node->fs_data) {
+            kfree(file->node->fs_data);
+        }
+        kfree(file->node);
     }
     
     /* Free the file descriptor */

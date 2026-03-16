@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 
-/* Syscall path validation */
-#define SYSCALL_MAX_PATH 4096  /* Maximum path length for validation */
+/* Syscall path validation — must match VFS_MAX_PATH (include/fs/vfs.h) */
+#define SYSCALL_MAX_PATH 256   /* Maximum path length for validation */
 #define SYSCALL_MAX_ARGC 256   /* Maximum argument count for execve */
 
 #include <stddef.h>

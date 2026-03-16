@@ -115,12 +115,17 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
             
             // Store exit status if requested
             if (wstatus) {
+                if (!is_valid_user_pointer(wstatus, sizeof(int))) {
+                    set_errno(THUNDEROS_EFAULT);
+                    return SYSCALL_ERROR;
+                }
                 *wstatus = (exit_code & 0xFF) << 8;  // Linux-style status encoding
             }
             
             // Free child process resources
             process_free(child);
             
+            clear_errno();
             return child_pid;
         }
         
@@ -141,6 +146,7 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
             // (Process stays stopped until SIGCONT)
             child->exit_code = 0;
             
+            clear_errno();
             return child_pid;
         }
         
@@ -176,6 +182,7 @@ uint64_t sys_getpid(void) {
         return SYSCALL_ERROR;
     }
     
+    clear_errno();
     return current_process->pid;
 }
 
@@ -199,6 +206,7 @@ uint64_t sys_sbrk(int heap_increment) {
     
     // If increment is zero, just return current brk
     if (heap_increment == 0) {
+        clear_errno();
         return old_brk;
     }
     
@@ -250,6 +258,7 @@ uint64_t sys_sbrk(int heap_increment) {
     // Update heap end
     proc->heap_end = new_brk;
     
+    clear_errno();
     return old_brk;
 }
 
@@ -263,6 +272,7 @@ uint64_t sys_sbrk(int heap_increment) {
  */
 uint64_t sys_sleep(uint64_t milliseconds) {
     if (milliseconds == 0) {
+        clear_errno();
         return SYSCALL_SUCCESS;
     }
     
@@ -274,6 +284,7 @@ uint64_t sys_sleep(uint64_t milliseconds) {
     extern void process_sleep(uint64_t ticks);
     process_sleep(ticks_to_wait);
     
+    clear_errno();
     return SYSCALL_SUCCESS;
 }
 
@@ -284,6 +295,7 @@ uint64_t sys_sleep(uint64_t milliseconds) {
  */
 uint64_t sys_yield(void) {
     process_yield();
+    clear_errno();
     return SYSCALL_SUCCESS;
 }
 
@@ -299,6 +311,7 @@ uint64_t sys_getppid(void) {
         return 0;
     }
     
+    clear_errno();
     return current_process->parent ? current_process->parent->pid : 0;
 }
 
@@ -311,6 +324,7 @@ uint64_t sys_getppid(void) {
  */
 uint64_t sys_kill(int pid, int signal) {
     if (pid <= 0) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
@@ -318,6 +332,7 @@ uint64_t sys_kill(int pid, int signal) {
     extern struct process *process_get(int pid);
     struct process *target = process_get(pid);
     if (!target) {
+        set_errno(THUNDEROS_ESRCH);
         return SYSCALL_ERROR;  /* No such process */
     }
     
@@ -325,7 +340,11 @@ uint64_t sys_kill(int pid, int signal) {
     extern int signal_send(struct process *proc, int signum);
     int result = signal_send(target, signal);
     
-    return (result == 0) ? 0 : SYSCALL_ERROR;
+    if (result == 0) {
+        clear_errno();
+        return 0;
+    }
+    return SYSCALL_ERROR;
 }
 
 /**
@@ -341,6 +360,7 @@ uint64_t sys_gettime(void) {
     uint64_t ticks = hal_timer_get_ticks();
     
     // Convert ticks to milliseconds (each tick = 100ms)
+    clear_errno();
     return ticks * TIMER_TICK_MS;
 }
 
@@ -360,12 +380,17 @@ uint64_t sys_open(const char *path, int flags, int mode) {
     // Validate path length
     size_t path_len = 0;
     const char *p = path;
-    while (*p && path_len < 4096) {
+    while (*p && path_len < SYSCALL_MAX_PATH) {
         p++;
         path_len++;
     }
     
-    if (path_len == 0 || path_len >= 4096) {
+    if (path_len == 0 || path_len >= SYSCALL_MAX_PATH) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Re-validate full path is in user memory
+    if (!is_valid_user_pointer(path, path_len + 1)) {
         return SYSCALL_ERROR;
     }
     
@@ -395,6 +420,7 @@ uint64_t sys_open(const char *path, int flags, int mode) {
         return SYSCALL_ERROR;
     }
 
+    clear_errno();
     return fd;
 }
 
@@ -407,11 +433,16 @@ uint64_t sys_open(const char *path, int flags, int mode) {
 uint64_t sys_close(int fd) {
     // Don't allow closing stdin/stdout/stderr
     if (fd <= STDERR_FD) {
+        set_errno(THUNDEROS_EBADF);
         return SYSCALL_ERROR;
     }
     
     int result = vfs_close(fd);
-    return (result == 0) ? SYSCALL_SUCCESS : SYSCALL_ERROR;
+    if (result != 0) {
+        return SYSCALL_ERROR;
+    }
+    clear_errno();
+    return SYSCALL_SUCCESS;
 }
 
 /**
@@ -437,6 +468,7 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
     if (file_descriptor == STDIN_FD) {
         // Read from input buffer or UART
         if (byte_count == 0) {
+            clear_errno();
             return 0;
         }
         
@@ -452,6 +484,7 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
                     int buffered = vterm_get_buffered_input_for(tty);
                     if (buffered >= 0) {
                         buffer[0] = (char)buffered;
+                        clear_errno();
                         return 1;
                     }
                 }
@@ -476,6 +509,7 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
                             interrupt_restore(old_state);
                             if (result != 0) {
                                 buffer[0] = result;
+                                clear_errno();
                                 return 1;
                             }
                             // Character consumed (VT switch), continue loop
@@ -496,13 +530,16 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
             int buffered = vterm_get_buffered_input();
             if (buffered >= 0) {
                 buffer[0] = (char)buffered;
+                clear_errno();
                 return 1;
             }
+            clear_errno();
             return 0;
         } else {
             // No vterm - read directly from UART (fallback)
             char c = hal_uart_getc();
             buffer[0] = c;
+            clear_errno();
             return 1;
         }
     }
@@ -518,6 +555,7 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
         return SYSCALL_ERROR;
     }
     
+    clear_errno();
     return bytes_read;
 }
 
@@ -568,6 +606,7 @@ uint64_t sys_write(int file_descriptor, const char *buffer, size_t byte_count) {
                 return SYSCALL_ERROR;
             }
         }
+        clear_errno();
         return byte_count;
     }
     
@@ -582,6 +621,7 @@ uint64_t sys_write(int file_descriptor, const char *buffer, size_t byte_count) {
         return SYSCALL_ERROR;
     }
     
+    clear_errno();
     return bytes_written;
 }
 
@@ -596,6 +636,7 @@ uint64_t sys_write(int file_descriptor, const char *buffer, size_t byte_count) {
 uint64_t sys_lseek(int fd, int64_t offset, int whence) {
     // Don't allow seeking on stdin/stdout/stderr
     if (fd <= STDERR_FD) {
+        set_errno(THUNDEROS_EBADF);
         return SYSCALL_ERROR;
     }
     
@@ -620,6 +661,7 @@ uint64_t sys_lseek(int fd, int64_t offset, int whence) {
         return SYSCALL_ERROR;
     }
     
+    clear_errno();
     return new_pos;
 }
 
@@ -647,9 +689,18 @@ uint64_t sys_stat(const char *path, void *statbuf) {
         return SYSCALL_ERROR;
     }
     
+    // Re-validate full path is in user memory
+    if (!is_valid_user_pointer(path, path_len + 1)) {
+        return SYSCALL_ERROR;
+    }
+    
     vfs_stat_t *stat_data = (vfs_stat_t *)statbuf;
     int result = vfs_stat_full(path, stat_data);
-    return (result == 0) ? SYSCALL_SUCCESS : SYSCALL_ERROR;
+    if (result != 0) {
+        return SYSCALL_ERROR;
+    }
+    clear_errno();
+    return SYSCALL_SUCCESS;
 }
 
 /**
@@ -676,8 +727,17 @@ uint64_t sys_mkdir(const char *path, int mode) {
         return SYSCALL_ERROR;
     }
     
+    // Re-validate full path is in user memory
+    if (!is_valid_user_pointer(path, path_len + 1)) {
+        return SYSCALL_ERROR;
+    }
+    
     int result = vfs_mkdir(path, mode);
-    return (result == 0) ? SYSCALL_SUCCESS : SYSCALL_ERROR;
+    if (result != 0) {
+        return SYSCALL_ERROR;
+    }
+    clear_errno();
+    return SYSCALL_SUCCESS;
 }
 
 /**
@@ -703,8 +763,17 @@ uint64_t sys_unlink(const char *path) {
         return SYSCALL_ERROR;
     }
     
+    // Re-validate full path is in user memory
+    if (!is_valid_user_pointer(path, path_len + 1)) {
+        return SYSCALL_ERROR;
+    }
+    
     int result = vfs_unlink(path);
-    return (result == 0) ? SYSCALL_SUCCESS : SYSCALL_ERROR;
+    if (result != 0) {
+        return SYSCALL_ERROR;
+    }
+    clear_errno();
+    return SYSCALL_SUCCESS;
 }
 
 /**
@@ -730,8 +799,17 @@ uint64_t sys_rmdir(const char *path) {
         return SYSCALL_ERROR;
     }
     
+    // Re-validate full path is in user memory
+    if (!is_valid_user_pointer(path, path_len + 1)) {
+        return SYSCALL_ERROR;
+    }
+    
     int result = vfs_rmdir(path);
-    return (result == 0) ? SYSCALL_SUCCESS : SYSCALL_ERROR;
+    if (result != 0) {
+        return SYSCALL_ERROR;
+    }
+    clear_errno();
+    return SYSCALL_SUCCESS;
 }
 
 /**
@@ -796,6 +874,7 @@ uint64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, uint64
         return SYSCALL_ERROR;
     }
     
+    clear_errno();
     return map_addr;
 }
 
@@ -809,6 +888,12 @@ uint64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, uint64
 uint64_t sys_munmap(void *addr, size_t length) {
     struct process *proc = process_current();
     if (!proc || !addr || length == 0) {
+        return SYSCALL_ERROR;
+    }
+    
+    // Validate addr is in user space, not kernel space
+    if ((uint64_t)addr >= KERNEL_SPACE_START) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
@@ -829,6 +914,7 @@ uint64_t sys_munmap(void *addr, size_t length) {
     // Remove VMA
     process_remove_vma(proc, vma);
     
+    clear_errno();
     return SYSCALL_SUCCESS;
 }
 
@@ -877,6 +963,7 @@ uint64_t sys_pipe(int pipefd[2]) {
         return SYSCALL_ERROR;
     }
     
+    clear_errno();
     return SYSCALL_SUCCESS;
 }
 
@@ -898,6 +985,7 @@ uint64_t sys_dup2(int oldfd, int newfd) {
     if (result < 0) {
         return SYSCALL_ERROR;
     }
+    clear_errno();
     return result;
 }
 
@@ -911,6 +999,7 @@ uint64_t sys_getuid(void) {
     if (!proc) {
         return 0;  /* Default to root */
     }
+    clear_errno();
     return proc->uid;
 }
 
@@ -924,6 +1013,7 @@ uint64_t sys_getgid(void) {
     if (!proc) {
         return 0;  /* Default to root */
     }
+    clear_errno();
     return proc->gid;
 }
 
@@ -937,6 +1027,7 @@ uint64_t sys_geteuid(void) {
     if (!proc) {
         return 0;  /* Default to root */
     }
+    clear_errno();
     return proc->euid;
 }
 
@@ -950,6 +1041,7 @@ uint64_t sys_getegid(void) {
     if (!proc) {
         return 0;  /* Default to root */
     }
+    clear_errno();
     return proc->egid;
 }
 
@@ -961,7 +1053,7 @@ uint64_t sys_getegid(void) {
  * @return 0 on success, -1 on error
  */
 uint64_t sys_chmod(const char *path, uint32_t mode) {
-    if (!path) {
+    if (!path || !is_valid_user_pointer(path, 1)) {
         set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
@@ -970,6 +1062,7 @@ uint64_t sys_chmod(const char *path, uint32_t mode) {
     if (result < 0) {
         return SYSCALL_ERROR;
     }
+    clear_errno();
     return 0;
 }
 
@@ -982,7 +1075,7 @@ uint64_t sys_chmod(const char *path, uint32_t mode) {
  * @return 0 on success, -1 on error
  */
 uint64_t sys_chown(const char *path, uint16_t uid, uint16_t gid) {
-    if (!path) {
+    if (!path || !is_valid_user_pointer(path, 1)) {
         set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
@@ -991,6 +1084,7 @@ uint64_t sys_chown(const char *path, uint16_t uid, uint16_t gid) {
     if (result < 0) {
         return SYSCALL_ERROR;
     }
+    clear_errno();
     return 0;
 }
 
@@ -1212,7 +1306,12 @@ uint64_t sys_getcwd(char *buf, size_t size) {
  */
 uint64_t sys_setsid(void) {
     /* Use the proper process group implementation */
-    return (uint64_t)process_setsid();
+    int result = process_setsid();
+    if (result < 0) {
+        return SYSCALL_ERROR;
+    }
+    clear_errno();
+    return (uint64_t)result;
 }
 
 /**
@@ -1225,7 +1324,12 @@ uint64_t sys_setsid(void) {
  * @return 0 on success, -1 on error
  */
 uint64_t sys_setpgid(int pid, int pgid) {
-    return (uint64_t)process_setpgid((pid_t)pid, (pid_t)pgid);
+    int result = process_setpgid((pid_t)pid, (pid_t)pgid);
+    if (result < 0) {
+        return SYSCALL_ERROR;
+    }
+    clear_errno();
+    return (uint64_t)result;
 }
 
 /**
@@ -1237,7 +1341,12 @@ uint64_t sys_setpgid(int pid, int pgid) {
  * @return Process group ID, or -1 on error
  */
 uint64_t sys_getpgid(int pid) {
-    return (uint64_t)process_getpgid((pid_t)pid);
+    int result = process_getpgid((pid_t)pid);
+    if (result < 0) {
+        return SYSCALL_ERROR;
+    }
+    clear_errno();
+    return (uint64_t)result;
 }
 
 /**
@@ -1249,7 +1358,12 @@ uint64_t sys_getpgid(int pid) {
  * @return Session ID, or -1 on error
  */
 uint64_t sys_getsid(int pid) {
-    return (uint64_t)process_getsid((pid_t)pid);
+    int result = process_getsid((pid_t)pid);
+    if (result < 0) {
+        return SYSCALL_ERROR;
+    }
+    clear_errno();
+    return (uint64_t)result;
 }
 
 /**
@@ -1265,6 +1379,7 @@ uint64_t sys_gettty(void) {
         return SYSCALL_ERROR;
     }
     
+    clear_errno();
     return (uint64_t)proc->controlling_tty;
 }
 
@@ -1285,10 +1400,12 @@ uint64_t sys_settty(int tty) {
     
     /* Validate terminal index */
     if (tty < -1 || tty >= VTERM_MAX_TERMINALS) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
     proc->controlling_tty = tty;
+    clear_errno();
     return 0;
 }
 
@@ -1451,7 +1568,11 @@ uint64_t sys_mutex_trylock(int mutex_id) {
         return SYSCALL_ERROR;
     }
     
-    return mutex_trylock(&user_mutexes[mutex_id]);
+    int result = mutex_trylock(&user_mutexes[mutex_id]);
+    if (result == 0) {
+        clear_errno();
+    }
+    return result;
 }
 
 /**
@@ -1762,6 +1883,10 @@ uint64_t sys_fork(struct trap_frame *tf) {
     pid_t child_pid = process_fork(tf);
     
     // Return child PID to parent, or -1 on error (errno already set)
+    if (child_pid < 0) {
+        return SYSCALL_ERROR;
+    }
+    clear_errno();
     return child_pid;
 }
 
@@ -1993,6 +2118,7 @@ uint64_t syscall_handler(uint64_t syscall_number,
             /* Set foreground process for current terminal */
             int pid = (int)argument0;
             vterm_set_active_fg_pid(pid);
+            clear_errno();
             return_value = 0;
             break;
         }
