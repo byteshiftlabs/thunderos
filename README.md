@@ -19,6 +19,11 @@ See [CHANGELOG.md](CHANGELOG.md) for complete feature list and [ROADMAP.md](ROAD
 
 ## Quick Start
 
+### Cloning
+```bash
+git clone --recurse-submodules git@github.com:byteshiftlabs/thunderos.git
+```
+
 ### Building
 ```bash
 make clean && make
