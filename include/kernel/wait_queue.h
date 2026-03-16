@@ -74,8 +74,9 @@ void wait_queue_init(wait_queue_t *wq);
  * function returns, as spurious wakeups can occur.
  *
  * @param wq Pointer to wait queue
+ * @return 0 on success, -1 if enqueue failed (caller should retry)
  */
-void wait_queue_sleep(wait_queue_t *wq);
+int wait_queue_sleep(wait_queue_t *wq);
 
 /**
  * Wake all processes sleeping on a wait queue

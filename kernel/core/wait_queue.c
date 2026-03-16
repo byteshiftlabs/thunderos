@@ -31,13 +31,12 @@ void wait_queue_init(wait_queue_t *wq) {
  * Adds current process to the wait queue and puts it to sleep.
  * The scheduler will not run this process until it's woken up.
  */
-void wait_queue_sleep(wait_queue_t *wq) {
-    if (!wq) return;
+int wait_queue_sleep(wait_queue_t *wq) {
+    if (!wq) return -1;
     
     struct process *current = process_current();
     if (!current) {
-        // No current process - this shouldn't happen
-        return;
+        return -1;
     }
     
     // Disable interrupts to ensure atomic operation
@@ -46,9 +45,10 @@ void wait_queue_sleep(wait_queue_t *wq) {
     // Allocate wait queue entry
     wait_queue_entry_t *entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
     if (!entry) {
-        // Failed to allocate - can't sleep, return immediately
+        // Failed to allocate - yield to prevent busy-spin, let caller retry
         interrupt_restore(old_state);
-        return;
+        schedule();
+        return -1;
     }
     
     entry->proc = current;
@@ -79,6 +79,7 @@ void wait_queue_sleep(wait_queue_t *wq) {
     schedule();
     
     // We've been woken up - the entry was freed by wake function
+    return 0;
 }
 
 /**
