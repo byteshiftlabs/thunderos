@@ -208,7 +208,7 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
     /* Allocate 3 descriptors: header, data buffer, status */
     uint16_t desc_idx = 0;
     if (virtqueue_alloc_desc_chain(vq, &desc_idx, 3) < 0) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
     
     /* Setup request header */

@@ -368,6 +368,7 @@ void signal_handle_with_frame(struct process *proc, int signum, struct trap_fram
             if (!proc->saved_signal_context) {
                 // Out of memory — re-pend for later delivery
                 proc->pending_signals |= (1UL << signum);
+                set_errno(THUNDEROS_ENOMEM);
                 return;
             }
             kmemcpy(proc->saved_signal_context, trap_frame, sizeof(struct trap_frame));

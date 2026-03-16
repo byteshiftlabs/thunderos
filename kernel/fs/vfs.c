@@ -290,6 +290,7 @@ int vfs_dup2(int oldfd, int newfd) {
     
     /* If oldfd == newfd, just return newfd */
     if (oldfd == newfd) {
+        clear_errno();
         return newfd;
     }
     
@@ -322,6 +323,7 @@ vfs_file_t *vfs_get_file(int fd) {
         set_errno(THUNDEROS_EBADF);
         return NULL;
     }
+    clear_errno();
     return &g_file_table[fd];
 }
 /**

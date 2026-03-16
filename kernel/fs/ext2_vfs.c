@@ -87,6 +87,7 @@ static int ext2_vfs_write(vfs_node_t *node, uint32_t offset, const void *buffer,
     /* Update VFS node size */
     node->size = inode->i_size;
     
+    clear_errno();
     return bytes_written;
 }
 
@@ -241,7 +242,9 @@ static int ext2_vfs_create(vfs_node_t *dir, const char *name, uint32_t mode) {
     uint32_t dir_inode_num = dir->inode;
     
     uint32_t new_inode = ext2_create_file(ext2_fs, dir_inode_num, name, mode);
-    return (new_inode == 0) ? -1 : 0;
+    if (new_inode == 0) return -1;
+    clear_errno();
+    return 0;
 }
 
 /**
@@ -257,7 +260,9 @@ static int ext2_vfs_mkdir(vfs_node_t *dir, const char *name, uint32_t mode) {
     uint32_t dir_inode_num = dir->inode;
     
     uint32_t new_inode = ext2_create_dir(ext2_fs, dir_inode_num, name, mode);
-    return (new_inode == 0) ? -1 : 0;
+    if (new_inode == 0) return -1;
+    clear_errno();
+    return 0;
 }
 
 /**
@@ -272,7 +277,10 @@ static int ext2_vfs_unlink(vfs_node_t *dir, const char *name) {
     ext2_fs_t *ext2_fs = (ext2_fs_t *)dir->fs->fs_data;
     uint32_t dir_inode_num = dir->inode;
     
-    return ext2_remove_file(ext2_fs, dir_inode_num, name);
+    int result = ext2_remove_file(ext2_fs, dir_inode_num, name);
+    if (result != 0) return -1;
+    clear_errno();
+    return 0;
 }
 
 /**
@@ -287,7 +295,10 @@ static int ext2_vfs_rmdir(vfs_node_t *dir, const char *name) {
     ext2_fs_t *ext2_fs = (ext2_fs_t *)dir->fs->fs_data;
     uint32_t dir_inode_num = dir->inode;
     
-    return ext2_remove_dir(ext2_fs, dir_inode_num, name);
+    int result = ext2_remove_dir(ext2_fs, dir_inode_num, name);
+    if (result != 0) return -1;
+    clear_errno();
+    return 0;
 }
 
 /**

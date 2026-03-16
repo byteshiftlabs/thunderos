@@ -362,6 +362,8 @@ int vterm_switch(int index)
  */
 static void vterm_scroll_up(vterm_t *term)
 {
+    if (term->rows == 0) return;
+
     /* Move all rows up */
     for (uint32_t row = 0; row < term->rows - 1; row++) {
         for (uint32_t col = 0; col < term->cols; col++) {

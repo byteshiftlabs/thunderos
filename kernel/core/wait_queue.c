@@ -122,6 +122,7 @@ int wait_queue_wake(wait_queue_t *wq) {
     
     interrupt_restore(old_state);
     
+    clear_errno();
     return woken;
 }
 
@@ -160,6 +161,7 @@ int wait_queue_wake_one(wait_queue_t *wq) {
     
     interrupt_restore(old_state);
     
+    clear_errno();
     return 1;
 }
 

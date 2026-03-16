@@ -981,6 +981,7 @@ uint64_t sys_pipe(int pipefd[2]) {
  * @errno THUNDEROS_EINVAL - newfd is out of range
  */
 uint64_t sys_dup2(int oldfd, int newfd) {
+    /* vfs_dup2 sets errno on all error paths */
     int result = vfs_dup2(oldfd, newfd);
     if (result < 0) {
         return SYSCALL_ERROR;

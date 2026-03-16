@@ -530,7 +530,7 @@ int map_user_code(page_table_t *page_table, uintptr_t user_vaddr,
     return 0;
 
 cleanup_pages:
-    /* Free all pages mapped so far (0..i-1 succeeded) */
+    /* Free any successfully mapped pages (virt_to_phys guards unmapped entries) */
     for (size_t j = 0; j < num_pages; j++) {
         uintptr_t mapped_vaddr = vaddr + (j * PAGE_SIZE);
         uintptr_t paddr;
