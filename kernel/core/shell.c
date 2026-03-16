@@ -57,7 +57,7 @@ static void shell_print_prompt(void) {
  * Print help message
  */
 static void shell_help(void) {
-    hal_uart_puts("ThunderOS Shell v0.4.0\n");
+    hal_uart_puts("ThunderOS Shell v0.10.0\n");
     hal_uart_puts("Available commands:\n");
     hal_uart_puts("  help   - Show this help message\n");
     hal_uart_puts("  clear  - Clear the screen\n");

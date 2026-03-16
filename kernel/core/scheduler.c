@@ -66,9 +66,6 @@ void scheduler_enqueue(struct process *proc) {
         return;
     }
     
-    (void)queue_count;  // Suppress unused warning - used for debugging
-    (void)queue_tail;   // Suppress unused warning - used for debugging
-    
     ready_queue[queue_tail] = proc;
     queue_tail = (queue_tail + 1) % READY_QUEUE_SIZE;
     queue_count++;

@@ -256,8 +256,6 @@ int elf_exec_replace(const char *path, const char *argv[], int argc, struct trap
     path_buf[path_len] = '\0';
     
     /* Copy argv to kernel buffers */
-    #define MAX_EXEC_ARGS 16
-    #define MAX_ARG_LEN 128
     char kargv_buf[MAX_EXEC_ARGS][MAX_ARG_LEN];
     const char *kargv[MAX_EXEC_ARGS + 1];
     int kargc = 0;

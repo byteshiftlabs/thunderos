@@ -1982,7 +1982,6 @@ uint64_t syscall_handler(uint64_t syscall_number,
             
         case SYS_SETFGPID: {
             /* Set foreground process for current terminal */
-            extern void vterm_set_active_fg_pid(int pid);
             int pid = (int)argument0;
             vterm_set_active_fg_pid(pid);
             return_value = 0;
@@ -2094,7 +2093,6 @@ uint64_t syscall_handler(uint64_t syscall_number,
             // This should not be reached
             hal_uart_puts("[WARN] SYS_FORK called from old syscall_handler\n");
             return_value = SYSCALL_ERROR;
-            break;
             break;
             
         case SYS_EXEC:

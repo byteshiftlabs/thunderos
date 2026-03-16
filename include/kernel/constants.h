@@ -52,6 +52,9 @@
 /* Initial stack size (in pages) */
 #define INITIAL_STACK_PAGES             8    /* 32KB initial stack */
 
+/* Default process priority (lower number = higher priority) */
+#define DEFAULT_PROCESS_PRIORITY        10
+
 /* Signal exit code base */
 #define SIGNAL_EXIT_BASE                128
 

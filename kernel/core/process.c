@@ -40,6 +40,39 @@ static inline void lock_release(volatile int *lock) {
     __sync_lock_release(lock);
 }
 
+/**
+ * Initialize common process metadata fields
+ *
+ * Sets priority, credentials, cwd, controlling tty, and inherits
+ * uid/gid/pgid/sid from the parent process (or defaults to root).
+ */
+static void process_init_common(struct process *proc) {
+    proc->cpu_time = 0;
+    proc->priority = DEFAULT_PROCESS_PRIORITY;
+    proc->parent = current_process;
+    proc->exit_code = 0;
+    proc->errno_value = 0;
+    proc->cwd[0] = '/';
+    proc->cwd[1] = '\0';
+    proc->controlling_tty = current_process ? current_process->controlling_tty : 0;
+
+    if (current_process) {
+        proc->uid = current_process->uid;
+        proc->gid = current_process->gid;
+        proc->euid = current_process->euid;
+        proc->egid = current_process->egid;
+        proc->pgid = current_process->pgid;
+        proc->sid = current_process->sid;
+    } else {
+        proc->uid = 0;
+        proc->gid = 0;
+        proc->euid = 0;
+        proc->egid = 0;
+        proc->pgid = proc->pid;
+        proc->sid = proc->pid;
+    }
+}
+
 // Forward declarations
 static void forked_child_entry(void);
 
@@ -302,37 +335,7 @@ struct process *process_create(const char *name, void (*entry_point)(void *), vo
     // Set stack pointer to top of kernel stack (16-byte aligned for RISC-V ABI)
     proc->context.sp = proc->kernel_stack + (size_t)KERNEL_STACK_SIZE - STACK_ALIGNMENT;
     
-    // Initialize other process fields
-    proc->cpu_time = 0;
-    proc->priority = 10;  // Default priority
-    proc->parent = current_process;
-    proc->exit_code = 0;
-    proc->errno_value = 0;
-    proc->cwd[0] = '/';
-    proc->cwd[1] = '\0';
-    proc->controlling_tty = current_process ? current_process->controlling_tty : 0;
-    
-    // Inherit uid/gid from parent process (or default to root)
-    if (current_process) {
-        proc->uid = current_process->uid;
-        proc->gid = current_process->gid;
-        proc->euid = current_process->euid;
-        proc->egid = current_process->egid;
-        // Inherit process group and session from parent
-        proc->pgid = current_process->pgid;
-        proc->sid = current_process->sid;
-    } else {
-        proc->uid = 0;   /* root */
-        proc->gid = 0;
-        proc->euid = 0;
-        proc->egid = 0;
-        // New process becomes its own group and session leader
-        proc->pgid = proc->pid;
-        proc->sid = proc->pid;
-    }
-    
-    // Initialize signals
-    extern void signal_init_process(struct process *proc);
+    process_init_common(proc);
     signal_init_process(proc);
     
     // Mark as ready and add to scheduler
@@ -937,34 +940,7 @@ struct process *process_create_user(const char *name, void *user_code, size_t co
     // Set kernel stack pointer (16-byte aligned per RISC-V ABI)
     proc->context.sp = proc->kernel_stack  + (size_t)KERNEL_STACK_SIZE- STACK_ALIGNMENT;
     
-    // Initialize process metadata
-    proc->cpu_time = 0;
-    proc->priority = 10;  // Default priority (lower number = higher priority)
-    proc->parent = current_process;
-    proc->exit_code = 0;
-    proc->errno_value = 0;
-    proc->cwd[0] = '/';
-    proc->cwd[1] = '\0';
-    proc->controlling_tty = current_process ? current_process->controlling_tty : 0;
-    
-    // Inherit uid/gid from parent process (or default to root)
-    if (current_process) {
-        proc->uid = current_process->uid;
-        proc->gid = current_process->gid;
-        proc->euid = current_process->euid;
-        proc->egid = current_process->egid;
-        // Inherit process group and session from parent
-        proc->pgid = current_process->pgid;
-        proc->sid = current_process->sid;
-    } else {
-        proc->uid = 0;
-        proc->gid = 0;
-        proc->euid = 0;
-        proc->egid = 0;
-        // New process becomes its own group and session leader
-        proc->pgid = proc->pid;
-        proc->sid = proc->pid;
-    }
+    process_init_common(proc);
     
     // Mark as ready and enqueue for scheduling
     proc->state = PROC_READY;
@@ -1034,7 +1010,6 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     }
     
     // Allocate user stack (multiple pages for stack growth)
-    #define INITIAL_STACK_PAGES 8  // 32KB initial stack
     uintptr_t stack_base_vaddr = USER_STACK_TOP - (INITIAL_STACK_PAGES * PAGE_SIZE);
     
     for (int i = 0; i < INITIAL_STACK_PAGES; i++) {
@@ -1108,34 +1083,7 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     // Set kernel stack pointer (16-byte aligned per RISC-V ABI)
     proc->context.sp = proc->kernel_stack  + (size_t)KERNEL_STACK_SIZE- STACK_ALIGNMENT;
     
-    // Initialize process metadata
-    proc->cpu_time = 0;
-    proc->priority = 10;  // Default priority
-    proc->parent = current_process;
-    proc->exit_code = 0;
-    proc->errno_value = 0;
-    proc->cwd[0] = '/';
-    proc->cwd[1] = '\0';
-    proc->controlling_tty = current_process ? current_process->controlling_tty : 0;
-    
-    // Inherit uid/gid from parent process (or default to root)
-    if (current_process) {
-        proc->uid = current_process->uid;
-        proc->gid = current_process->gid;
-        proc->euid = current_process->euid;
-        proc->egid = current_process->egid;
-        // Inherit process group and session from parent
-        proc->pgid = current_process->pgid;
-        proc->sid = current_process->sid;
-    } else {
-        proc->uid = 0;
-        proc->gid = 0;
-        proc->euid = 0;
-        proc->egid = 0;
-        // New process becomes its own group and session leader
-        proc->pgid = proc->pid;
-        proc->sid = proc->pid;
-    }
+    process_init_common(proc);
     
     // Setup memory isolation (VMAs for validation)
     if (process_setup_memory_isolation(proc) != 0) {
@@ -1239,9 +1187,6 @@ void user_mode_entry_wrapper(void) {
     
     // Should never reach here
     kernel_panic("Returned from enter_user_mode_asm!");
-    
-    // Should never reach here
-    kernel_panic("user_mode_entry_wrapper: user_return returned");
 }
 
 /**
