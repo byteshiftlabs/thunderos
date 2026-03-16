@@ -22,6 +22,7 @@
 #include "fs/vfs.h"
 #include <stdint.h>
 #include <stddef.h>
+#include "arch/interrupt.h"
 
 // External SBI functions for system shutdown/reboot
 extern void sbi_shutdown(void);
@@ -1429,15 +1430,18 @@ static int condvar_in_use[MAX_USER_CONDVARS] = {0};
  * @return Mutex ID (>= 0) on success, -1 on error
  */
 uint64_t sys_mutex_create(void) {
+    uint64_t flags = interrupt_save_disable();
     /* Find a free mutex slot */
     for (int i = 0; i < MAX_USER_MUTEXES; i++) {
         if (!mutex_in_use[i]) {
             mutex_init(&user_mutexes[i]);
             mutex_in_use[i] = 1;
+            interrupt_restore(flags);
             clear_errno();
             return (uint64_t)i;
         }
     }
+    interrupt_restore(flags);
     
     set_errno(THUNDEROS_ENOMEM);
     return SYSCALL_ERROR;
@@ -1504,7 +1508,9 @@ uint64_t sys_mutex_destroy(int mutex_id) {
         return SYSCALL_ERROR;
     }
     
+    uint64_t flags = interrupt_save_disable();
     mutex_in_use[mutex_id] = 0;
+    interrupt_restore(flags);
     clear_errno();
     return 0;
 }
@@ -1515,15 +1521,18 @@ uint64_t sys_mutex_destroy(int mutex_id) {
  * @return Condition variable ID (>= 0) on success, -1 on error
  */
 uint64_t sys_cond_create(void) {
+    uint64_t flags = interrupt_save_disable();
     /* Find a free condvar slot */
     for (int i = 0; i < MAX_USER_CONDVARS; i++) {
         if (!condvar_in_use[i]) {
             cond_init(&user_condvars[i]);
             condvar_in_use[i] = 1;
+            interrupt_restore(flags);
             clear_errno();
             return (uint64_t)i;
         }
     }
+    interrupt_restore(flags);
     
     set_errno(THUNDEROS_ENOMEM);
     return SYSCALL_ERROR;
@@ -1605,8 +1614,10 @@ uint64_t sys_cond_destroy(int cond_id) {
         return SYSCALL_ERROR;
     }
     
+    uint64_t flags = interrupt_save_disable();
     cond_destroy(&user_condvars[cond_id]);
     condvar_in_use[cond_id] = 0;
+    interrupt_restore(flags);
     clear_errno();
     return 0;
 }
@@ -1626,15 +1637,18 @@ static int rwlock_in_use[MAX_USER_RWLOCKS] = {0};
  * @return RWLock ID (>= 0) on success, -1 on error
  */
 uint64_t sys_rwlock_create(void) {
+    uint64_t flags = interrupt_save_disable();
     /* Find a free rwlock slot */
     for (int i = 0; i < MAX_USER_RWLOCKS; i++) {
         if (!rwlock_in_use[i]) {
             rwlock_init(&user_rwlocks[i]);
             rwlock_in_use[i] = 1;
+            interrupt_restore(flags);
             clear_errno();
             return (uint64_t)i;
         }
     }
+    interrupt_restore(flags);
     
     set_errno(THUNDEROS_ENOMEM);
     return SYSCALL_ERROR;
@@ -1720,7 +1734,9 @@ uint64_t sys_rwlock_destroy(int rwlock_id) {
         return SYSCALL_ERROR;
     }
     
+    uint64_t flags = interrupt_save_disable();
     rwlock_in_use[rwlock_id] = 0;
+    interrupt_restore(flags);
     clear_errno();
     return 0;
 }
