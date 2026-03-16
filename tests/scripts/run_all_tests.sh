@@ -1,95 +1,73 @@
 #!/bin/bash
+# Run all ThunderOS tests.
 #
-# Run All ThunderOS Tests
-#
-# This script runs all non-interactive tests:
-#   - Kernel functionality test (comprehensive)
-#   - Boot test (quick sanity check)
-#   - Integration test (VirtIO, ext2, programs)
+# Builds the kernel ONCE (ENABLE_TESTS=1 TEST_MODE=1), then runs each test
+# suite with --skip-build to avoid redundant rebuilds.
 #
 # Usage: ./run_all_tests.sh [--quick]
-#   --quick: Run only boot test (faster, for CI)
-#
+#   --quick  Boot test only (fast CI sanity check; rebuilds without test mode)
 
-set -e
-
-# Ensure TERM is set for tput commands (needed for CI environments)
 export TERM="${TERM:-dumb}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="${SCRIPT_DIR}/../.."
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-BLUE='\033[0;34m'
-YELLOW='\033[1;33m'
-NC='\033[0m'
+source "${SCRIPT_DIR}/test_helpers.sh"
 
-echo ""
-echo "========================================"
-echo "  ThunderOS Complete Test Suite"
-echo "========================================"
-echo ""
+SUITES_FAILED=0
+SUITES_TOTAL=0
 
-TOTAL_FAILED=0
-QUICK_MODE=0
-
-# Parse arguments
-for arg in "$@"; do
-    case $arg in
-        --quick)
-            QUICK_MODE=1
-            ;;
-    esac
-done
-
-if [ $QUICK_MODE -eq 1 ]; then
-    echo -e "${YELLOW}Running in quick mode (boot test only)${NC}"
-    echo ""
-    
-    # Quick mode: just boot test
-    echo -e "${BLUE}[1/1]${NC} Running boot test..."
-    if bash "${SCRIPT_DIR}/test_boot.sh"; then
-        echo -e "${GREEN}✓ Boot test passed${NC}"
+run_suite() {
+    local name="$1" script="$2"; shift 2
+    SUITES_TOTAL=$((SUITES_TOTAL + 1))
+    printf "\n"
+    if bash "${SCRIPT_DIR}/${script}" "$@"; then
+        return 0
     else
-        echo -e "${RED}✗ Boot test failed${NC}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
+        SUITES_FAILED=$((SUITES_FAILED + 1))
+        return 1
     fi
-else
-    # Full test suite
-    
-    # Test 1: Kernel functionality test (comprehensive)
-    echo -e "${BLUE}[1/2]${NC} Running kernel functionality test..."
-    if bash "${SCRIPT_DIR}/test_kernel.sh"; then
-        echo -e "${GREEN}✓ Kernel functionality test passed${NC}"
-    else
-        echo -e "${RED}✗ Kernel functionality test failed${NC}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
+}
 
-    echo ""
+# ── Quick mode: boot test only ───────────────────────────────────────────────
 
-    # Test 2: Integration test
-    echo -e "${BLUE}[2/2]${NC} Running integration test..."
-    if bash "${SCRIPT_DIR}/test_integration.sh"; then
-        echo -e "${GREEN}✓ Integration test passed${NC}"
-    else
-        echo -e "${RED}✗ Integration test failed${NC}"
-        TOTAL_FAILED=$((TOTAL_FAILED + 1))
-    fi
+if [ "${1:-}" = "--quick" ]; then
+    run_suite "Boot" "test_boot.sh" || true
+    printf "\n[${_B}==========${_N}] %d suite(s) ran.\n" "$SUITES_TOTAL"
+    [ $SUITES_FAILED -eq 0 ] \
+        && printf "[${_G}  PASSED  ${_N}] All %d suite(s).\n" "$SUITES_TOTAL" \
+        && exit 0
+    printf "[${_R}  FAILED  ${_N}] %d of %d suite(s) failed.\n" "$SUITES_FAILED" "$SUITES_TOTAL"
+    exit 1
 fi
 
-# Summary
-echo ""
-echo "========================================"
-echo "  Complete Test Suite Summary"
-echo "========================================"
-echo ""
+# ── Full suite: build once, share across suites ──────────────────────────────
 
-if [ $TOTAL_FAILED -eq 0 ]; then
-    echo -e "${GREEN}✓ ALL TESTS PASSED${NC}"
+printf "[${_B}==========${_N}] ThunderOS Complete Test Suite\n"
+printf "[ SETUP    ] Building kernel (ENABLE_TESTS=1 TEST_MODE=1)..."
+cd "${ROOT_DIR}"
+if make clean >/dev/null 2>&1 && make ENABLE_TESTS=1 TEST_MODE=1 >/dev/null 2>&1; then
+    printf " OK\n"
+else
+    printf " FAILED\n"
+    printf "[${_R}  ERROR   ${_N}] Kernel build failed. Run 'make ENABLE_TESTS=1 TEST_MODE=1' for details.\n" >&2
+    exit 1
+fi
+printf "[ SETUP    ] Building userland..."
+if make userland >/dev/null 2>&1; then
+    printf " OK\n"
+else
+    printf " skipped\n"
+fi
+
+run_suite "Kernel Functionality" "test_kernel.sh" --skip-build || true
+run_suite "Integration"          "test_integration.sh" --skip-build || true
+
+printf "\n[${_B}==========${_N}] %d suite(s) ran.\n" "$SUITES_TOTAL"
+if [ $SUITES_FAILED -eq 0 ]; then
+    printf "[${_G}  PASSED  ${_N}] All %d suite(s).\n" "$SUITES_TOTAL"
     exit 0
 else
-    echo -e "${RED}✗ $TOTAL_FAILED test suite(s) failed${NC}"
+    printf "[${_R}  FAILED  ${_N}] %d of %d suite(s) failed.\n" "$SUITES_FAILED" "$SUITES_TOTAL"
     exit 1
 fi

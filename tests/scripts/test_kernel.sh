@@ -1,26 +1,10 @@
 #!/bin/bash
-#
 # ThunderOS Kernel Functionality Test
-# Tests all kernel subsystems without shell interaction
+# Builds kernel (ENABLE_TESTS=1 TEST_MODE=1), runs in QEMU, checks output.
 #
-# This script verifies:
-#   1. Kernel boot and initialization
-#   2. Memory management (PMM, paging, DMA, kmalloc)
-#   3. VirtIO block device
-#   4. ext2 filesystem mounting
-#   5. ELF loader
-#   6. Process management and scheduler
-#   7. Signal subsystem
-#   8. Pipe subsystem
-#
-# Exit codes:
-#   0 - All tests passed
-#   1 - One or more tests failed
-#
+# Options:
+#   --skip-build   Skip make; use existing build/thunderos.elf
 
-set -e
-
-# Ensure TERM is set for tput commands (needed for CI environments)
 export TERM="${TERM:-dumb}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,279 +13,126 @@ BUILD_DIR="${ROOT_DIR}/build"
 OUTPUT_DIR="${SCRIPT_DIR}/../outputs"
 OUTPUT_FILE="${OUTPUT_DIR}/kernel_test_output.txt"
 QEMU_TIMEOUT=10
+SKIP_BUILD=0
 
-# QEMU detection
+for arg in "$@"; do
+    [ "$arg" = "--skip-build" ] && SKIP_BUILD=1
+done
+
+# shellcheck source=test_helpers.sh
+source "${SCRIPT_DIR}/test_helpers.sh"
+
 if command -v qemu-system-riscv64 >/dev/null 2>&1; then
-    QEMU_BIN="${QEMU_BIN:-qemu-system-riscv64}"
+    QEMU_BIN="qemu-system-riscv64"
 elif [ -x /tmp/qemu-10.1.2/build/qemu-system-riscv64 ]; then
     QEMU_BIN="/tmp/qemu-10.1.2/build/qemu-system-riscv64"
 else
-    echo "ERROR: qemu-system-riscv64 not found"
+    printf "[${_R}  ERROR   ${_N}] qemu-system-riscv64 not found\n" >&2
     exit 1
 fi
 
 mkdir -p "${OUTPUT_DIR}"
 
-# Colors
-GREEN='\033[0;32m'
-RED='\033[0;31m'
-YELLOW='\033[1;33m'
-BLUE='\033[0;34m'
-NC='\033[0m'
+printf "[${_B}==========${_N}] ThunderOS Kernel Functionality Test\n"
 
-print_header() {
-    echo ""
-    echo "========================================"
-    echo "  $1"
-    echo "========================================"
-    echo ""
-}
+# ── Setup ───────────────────────────────────────────────────────────────────
 
-print_pass() { echo -e "  ${GREEN}[PASS]${NC} $1"; }
-print_fail() { echo -e "  ${RED}[FAIL]${NC} $1"; }
-print_info() { echo -e "  ${BLUE}[INFO]${NC} $1"; }
-print_test() { echo -e "\n${YELLOW}[TEST]${NC} $1"; }
-
-# Build kernel with TEST_MODE (no shell)
-print_header "ThunderOS Kernel Functionality Test"
-print_info "Building kernel in test mode (no shell)..."
-
-cd "${ROOT_DIR}"
-if make clean >/dev/null 2>&1 && make TEST_MODE=1 >/dev/null 2>&1; then
-    print_pass "Kernel build successful"
-else
-    print_fail "Kernel build failed"
-    exit 1
-fi
-
-# Build userland
-print_info "Building userland programs..."
-if make userland >/dev/null 2>&1; then
-    print_pass "Userland build successful"
-else
-    print_info "Userland build skipped (optional)"
-fi
-
-# Create filesystem
-print_info "Creating ext2 filesystem..."
-DISK_IMAGE="${BUILD_DIR}/test_fs.img"
-rm -rf "${BUILD_DIR}/test_fs_contents"
-mkdir -p "${BUILD_DIR}/test_fs_contents/bin"
-
-echo "Test file for ThunderOS" > "${BUILD_DIR}/test_fs_contents/test.txt"
-echo "Hello from ext2!" > "${BUILD_DIR}/test_fs_contents/hello.txt"
-
-# Copy userland programs if they exist
-for prog in hello cat ls pwd mkdir rmdir clear ush; do
-    if [ -f "${ROOT_DIR}/userland/build/$prog" ]; then
-        cp "${ROOT_DIR}/userland/build/$prog" "${BUILD_DIR}/test_fs_contents/bin/"
+if [ "$SKIP_BUILD" -eq 0 ]; then
+    printf "[ SETUP    ] Building kernel (ENABLE_TESTS=1 TEST_MODE=1)..."
+    cd "${ROOT_DIR}"
+    if make clean >/dev/null 2>&1 && make ENABLE_TESTS=1 TEST_MODE=1 >/dev/null 2>&1; then
+        printf " OK\n"
+    else
+        printf " FAILED\n"
+        printf "[${_R}  ERROR   ${_N}] Kernel build failed. Run 'make ENABLE_TESTS=1 TEST_MODE=1' for details.\n" >&2
+        exit 1
     fi
-done
 
-if mkfs.ext2 -F -q -d "${BUILD_DIR}/test_fs_contents" "${DISK_IMAGE}" 10M >/dev/null 2>&1; then
-    print_pass "ext2 filesystem created"
+    printf "[ SETUP    ] Building userland..."
+    if make userland >/dev/null 2>&1; then
+        printf " OK\n"
+    else
+        printf " skipped\n"
+    fi
+fi
+
+printf "[ SETUP    ] Creating ext2 test image..."
+DISK_IMAGE="${BUILD_DIR}/kernel_test_fs.img"
+rm -rf "${BUILD_DIR}/_kernel_test_fs"
+mkdir -p "${BUILD_DIR}/_kernel_test_fs/bin"
+printf "Test file\n"         > "${BUILD_DIR}/_kernel_test_fs/test.txt"
+printf "Hello from ext2!\n"  > "${BUILD_DIR}/_kernel_test_fs/hello.txt"
+for prog in hello cat ls pwd mkdir rmdir clear ush; do
+    [ -f "${ROOT_DIR}/userland/build/$prog" ] && \
+        cp "${ROOT_DIR}/userland/build/$prog" "${BUILD_DIR}/_kernel_test_fs/bin/"
+done
+if mkfs.ext2 -F -q -d "${BUILD_DIR}/_kernel_test_fs" "${DISK_IMAGE}" 10M >/dev/null 2>&1; then
+    printf " OK\n"
+    rm -rf "${BUILD_DIR}/_kernel_test_fs"
 else
-    print_fail "ext2 filesystem creation failed"
+    printf " FAILED\n"
+    printf "[${_R}  ERROR   ${_N}] mkfs.ext2 failed\n" >&2
     exit 1
 fi
-rm -rf "${BUILD_DIR}/test_fs_contents"
 
-# Run QEMU
-print_test "Running kernel in QEMU (${QEMU_TIMEOUT}s timeout)"
-print_info "All tests are built into the kernel and run automatically"
-
+printf "[ SETUP    ] Running QEMU (%ds timeout)..." "${QEMU_TIMEOUT}"
+T0=$SECONDS
 timeout $((QEMU_TIMEOUT + 2)) "${QEMU_BIN}" \
-    -machine virt \
-    -m 128M \
-    -nographic \
-    -serial mon:stdio \
-    -bios none \
+    -machine virt -m 128M -nographic -serial mon:stdio -bios none \
     -kernel "${BUILD_DIR}/thunderos.elf" \
     -global virtio-mmio.force-legacy=false \
     -drive file="${DISK_IMAGE}",if=none,format=raw,id=hd0 \
     -device virtio-blk-device,drive=hd0 \
-    </dev/null 2>&1 | tee "${OUTPUT_FILE}" || true
+    </dev/null >"${OUTPUT_FILE}" 2>&1 || true
+T_ELAPSED=$((SECONDS - T0))
+printf " done (%ds)\n\n" "${T_ELAPSED}"
 
-# Analyze output
-print_header "Test Results"
+# ── Tests ───────────────────────────────────────────────────────────────────
 
-FAILED=0
-PASSED=0
+gtest_suite_begin "Boot"
+gtest_run "Boot.BannerDisplayed"       "ThunderOS.*RISC-V"                "${OUTPUT_FILE}"
+gtest_run "Boot.UartInitialized"       "\[OK\] UART initialized"          "${OUTPUT_FILE}"
+gtest_run "Boot.InterruptsInitialized" "\[OK\] Interrupt subsystem"       "${OUTPUT_FILE}"
+gtest_run "Boot.TrapHandlerInstalled"  "\[OK\] Trap handler"              "${OUTPUT_FILE}"
+gtest_run "Boot.MemoryManagement"      "\[OK\] Memory management"         "${OUTPUT_FILE}"
+gtest_run "Boot.VirtualMemory"         "\[OK\] Virtual memory"            "${OUTPUT_FILE}"
+gtest_run "Boot.DmaAllocator"          "\[OK\] DMA allocator"             "${OUTPUT_FILE}"
+gtest_suite_end "Boot"
 
-# Test 1: Kernel Boot
-print_test "Kernel Boot"
-if grep -q "ThunderOS.*RISC-V" "${OUTPUT_FILE}"; then
-    print_pass "Kernel banner displayed"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "Kernel banner not found"
-    FAILED=$((FAILED + 1))
-fi
+gtest_suite_begin "Memory"
+gtest_run "Memory.BuiltinTestsPassed"  "ALL TESTS PASSED"                 "${OUTPUT_FILE}"
+gtest_suite_end "Memory"
 
-# Test 2: UART
-if grep -q "\[OK\] UART initialized" "${OUTPUT_FILE}"; then
-    print_pass "UART initialized"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "UART initialization failed"
-    FAILED=$((FAILED + 1))
-fi
+gtest_suite_begin "ELF"
+gtest_run "ELF.LoaderTestsPassed"      "ELF Loader Tests"                 "${OUTPUT_FILE}"
+gtest_suite_end "ELF"
 
-# Test 3: Interrupts
-if grep -q "\[OK\] Interrupt subsystem initialized" "${OUTPUT_FILE}"; then
-    print_pass "Interrupt subsystem initialized"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "Interrupt initialization failed"
-    FAILED=$((FAILED + 1))
-fi
+gtest_suite_begin "Process"
+gtest_run "Process.Initialized"        "\[OK\] Process management"        "${OUTPUT_FILE}"
+gtest_run "Process.SchedulerReady"     "\[OK\] Scheduler"                 "${OUTPUT_FILE}"
+gtest_run "Process.PipeSubsystem"      "\[OK\] Pipe subsystem"            "${OUTPUT_FILE}"
+gtest_suite_end "Process"
 
-# Test 4: Trap handler
-if grep -q "\[OK\] Trap handler initialized" "${OUTPUT_FILE}"; then
-    print_pass "Trap handler initialized"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "Trap handler initialization failed"
-    FAILED=$((FAILED + 1))
-fi
+gtest_suite_begin "VirtIO"
+gtest_run "VirtIO.BlockDeviceReady"    "\[OK\] VirtIO block device"       "${OUTPUT_FILE}"
+gtest_suite_end "VirtIO"
 
-# Test 5: Memory management
-if grep -q "\[OK\] Memory management initialized" "${OUTPUT_FILE}"; then
-    print_pass "Memory management initialized"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "Memory management initialization failed"
-    FAILED=$((FAILED + 1))
-fi
+gtest_suite_begin "Filesystem"
+gtest_run "FS.Ext2Mounted"             "\[OK\] ext2 filesystem mounted"   "${OUTPUT_FILE}"
+gtest_run "FS.VfsRootMounted"          "\[OK\] VFS root filesystem"       "${OUTPUT_FILE}"
+gtest_suite_end "Filesystem"
 
-# Test 6: Virtual memory
-if grep -q "\[OK\] Virtual memory initialized" "${OUTPUT_FILE}"; then
-    print_pass "Virtual memory (Sv39) initialized"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "Virtual memory initialization failed"
-    FAILED=$((FAILED + 1))
-fi
+gtest_suite_begin "UnitTests"
+gtest_run "UnitTests.PMM"              "PMM Unit Tests"                   "${OUTPUT_FILE}"
+gtest_run "UnitTests.Kmalloc"          "kmalloc Unit Tests"               "${OUTPUT_FILE}"
+gtest_run "UnitTests.Errno"            "errno Unit Tests"                 "${OUTPUT_FILE}"
+gtest_suite_end "UnitTests"
 
-# Test 7: DMA allocator
-if grep -q "\[OK\] DMA allocator initialized" "${OUTPUT_FILE}"; then
-    print_pass "DMA allocator initialized"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "DMA allocator initialization failed"
-    FAILED=$((FAILED + 1))
-fi
+gtest_suite_begin "Stability"
+gtest_run_absent "Stability.NoPanic"   "KERNEL PANIC\|unhandled trap\|double fault" "${OUTPUT_FILE}"
+gtest_suite_end "Stability"
 
-# Test 8: Built-in memory tests
-print_test "Memory Management Tests"
-if grep -q "ALL TESTS PASSED" "${OUTPUT_FILE}"; then
-    # Count how many tests passed
-    TEST_COUNT=$(grep -c "PASS" "${OUTPUT_FILE}" 2>/dev/null || echo "0")
-    print_pass "Built-in memory tests passed (${TEST_COUNT} checks)"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "Built-in memory tests failed"
-    FAILED=$((FAILED + 1))
-fi
-
-# Test 9: ELF loader tests
-print_test "ELF Loader Tests"
-if grep -q "ELF Loader Tests" "${OUTPUT_FILE}" && grep -q "ALL TESTS PASSED" "${OUTPUT_FILE}"; then
-    print_pass "ELF loader tests passed"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "ELF loader tests failed or not run"
-    FAILED=$((FAILED + 1))
-fi
-
-# Test 10: Process management
-print_test "Process Management"
-if grep -q "\[OK\] Process management initialized" "${OUTPUT_FILE}"; then
-    print_pass "Process management initialized"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "Process management initialization failed"
-    FAILED=$((FAILED + 1))
-fi
-
-# Test 11: Scheduler
-if grep -q "\[OK\] Scheduler initialized" "${OUTPUT_FILE}"; then
-    print_pass "Scheduler initialized"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "Scheduler initialization failed"
-    FAILED=$((FAILED + 1))
-fi
-
-# Test 12: Pipe subsystem
-if grep -q "\[OK\] Pipe subsystem initialized" "${OUTPUT_FILE}"; then
-    print_pass "Pipe subsystem initialized"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "Pipe subsystem initialization failed"
-    FAILED=$((FAILED + 1))
-fi
-
-# Test 13: VirtIO
-print_test "VirtIO Block Device"
-if grep -q "\[OK\] VirtIO block device initialized" "${OUTPUT_FILE}"; then
-    print_pass "VirtIO block device initialized"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "VirtIO initialization failed"
-    FAILED=$((FAILED + 1))
-fi
-
-# Test 14: ext2 filesystem
-print_test "ext2 Filesystem"
-if grep -q "\[OK\] ext2 filesystem mounted" "${OUTPUT_FILE}"; then
-    print_pass "ext2 filesystem mounted"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "ext2 mount failed"
-    FAILED=$((FAILED + 1))
-fi
-
-# Test 15: VFS
-if grep -q "\[OK\] VFS root filesystem mounted" "${OUTPUT_FILE}"; then
-    print_pass "VFS root filesystem mounted"
-    PASSED=$((PASSED + 1))
-else
-    print_fail "VFS mount failed"
-    FAILED=$((FAILED + 1))
-fi
-
-# Test 16: No kernel panics
-print_test "Stability"
-if grep -qi "KERNEL PANIC\|page fault\|exception\|trap" "${OUTPUT_FILE}" | grep -v "Trap handler\|trap_handler"; then
-    print_fail "Kernel panic or unhandled exception detected"
-    FAILED=$((FAILED + 1))
-else
-    print_pass "No kernel panics or crashes"
-    PASSED=$((PASSED + 1))
-fi
-
-# Summary
-print_header "Test Summary"
-
-TOTAL=$((PASSED + FAILED))
-
-echo ""
-echo "  Tests Passed: ${PASSED}/${TOTAL}"
-echo "  Tests Failed: ${FAILED}/${TOTAL}"
-echo ""
-
-if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}========================================"
-    echo -e "  ✓ ALL TESTS PASSED"
-    echo -e "========================================${NC}"
-    print_info "Output saved to: ${OUTPUT_FILE}"
-    exit 0
-else
-    echo -e "${RED}========================================"
-    echo -e "  ✗ ${FAILED} TEST(S) FAILED"
-    echo -e "========================================${NC}"
-    print_info "Output saved to: ${OUTPUT_FILE}"
-    print_info "Review output for details"
-    exit 1
-fi
+gtest_summary "${T_ELAPSED}"
+RESULT=$?
+printf "  Full output: %s\n" "${OUTPUT_FILE}"
+exit $RESULT
