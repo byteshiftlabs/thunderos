@@ -349,11 +349,12 @@ void signal_handle_with_frame(struct process *proc, int signum, struct trap_fram
             /*
              * Save the entire interrupted context in kernel memory so that
              * sys_sigreturn can restore it.  Nested signals are not supported:
-             * if a signal is already being handled, the new one is silently
-             * dropped (the context would be overwritten otherwise).
+             * if a signal is already being handled, re-pend it so it will be
+             * delivered after the current handler finishes via sys_sigreturn.
              */
             if (proc->saved_signal_context) {
-                // Already handling a signal — drop this one
+                // Already handling a signal — re-pend for later delivery
+                proc->pending_signals |= (1UL << signum);
                 return;
             }
             

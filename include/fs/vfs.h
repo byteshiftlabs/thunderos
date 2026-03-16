@@ -143,7 +143,7 @@ int vfs_init(void);
 int vfs_mount_root(vfs_filesystem_t *fs);
 
 /* File operations */
-int vfs_open(const char *path, uint32_t flags);
+int vfs_open(const char *path, uint32_t flags, uint32_t mode);
 int vfs_close(int fd);
 int vfs_read(int fd, void *buffer, uint32_t size);
 int vfs_write(int fd, const void *buffer, uint32_t size);

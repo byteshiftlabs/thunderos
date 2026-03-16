@@ -143,7 +143,7 @@ static void shell_cat(int argument_count, char **argument_vector) {
     const char *file_path = argument_vector[1];
     
     /* Open the file */
-    int file_descriptor = vfs_open(file_path, O_RDONLY);
+    int file_descriptor = vfs_open(file_path, O_RDONLY, 0);
     if (file_descriptor < 0) {
         hal_uart_puts("cat: ");
         hal_uart_puts(file_path);

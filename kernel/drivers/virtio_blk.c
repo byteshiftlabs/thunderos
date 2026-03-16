@@ -260,15 +260,18 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
     virtqueue_add_to_avail(vq, desc_idx);
     virtqueue_notify(dev, 0);
     
-    /* Poll for completion (synchronous for now) */
+    /* Poll for completion using WFI to yield CPU between checks.
+     * The VirtIO interrupt will wake the hart from WFI. */
     uint32_t timeout = 1000000;
     
     while (timeout > 0) {
-        /* Check and acknowledge interrupt status even in polling mode */
+        /* Check and acknowledge interrupt status */
         uint32_t int_status = VIRTIO_READ32(dev, VIRTIO_MMIO_INTERRUPT_STATUS);
         if (int_status) {
             VIRTIO_WRITE32(dev, VIRTIO_MMIO_INTERRUPT_ACK, int_status);
         }
+        
+        read_barrier();
         
         uint16_t used_idx;
         uint32_t len;
@@ -282,6 +285,9 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
             clear_errno();
             return sectors;
         }
+        
+        /* Yield CPU until next interrupt instead of busy-spinning */
+        __asm__ volatile("wfi");
         timeout--;
     }
     
@@ -526,7 +532,11 @@ void virtio_blk_irq_handler(void)
     uint32_t int_status = VIRTIO_READ32(g_blk_device, VIRTIO_MMIO_INTERRUPT_STATUS);
     VIRTIO_WRITE32(g_blk_device, VIRTIO_MMIO_INTERRUPT_ACK, int_status);
     
-    /* TODO: Process used buffers asynchronously */
+    /*
+     * Used buffer processing happens in the synchronous polling loop
+     * (virtio_blk_do_request). The IRQ acknowledgement here ensures the
+     * hart wakes from WFI so the polling loop can check completion.
+     */
 }
 
 /**

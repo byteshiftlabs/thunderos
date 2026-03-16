@@ -410,7 +410,7 @@ vfs_node_t *vfs_resolve_path(const char *path) {
 /**
  * Open a file
  */
-int vfs_open(const char *path, uint32_t flags) {
+int vfs_open(const char *path, uint32_t flags, uint32_t mode) {
     if (!path) {
         hal_uart_puts("vfs: NULL path\n");
         RETURN_ERRNO(THUNDEROS_EINVAL);
@@ -444,7 +444,8 @@ int vfs_open(const char *path, uint32_t flags) {
             /* Create file in root directory */
             vfs_node_t *root = g_root_fs->root;
             if (root->ops && root->ops->create) {
-                int ret = root->ops->create(root, filename, VFS_DEFAULT_FILE_MODE);
+                uint32_t create_mode = mode ? mode : VFS_DEFAULT_FILE_MODE;
+                int ret = root->ops->create(root, filename, create_mode);
                 if (ret != 0) {
                     hal_uart_puts("vfs: Failed to create file\n");
                     /* errno already set by create */

@@ -279,7 +279,7 @@ pid_t process_fork(struct trap_frame *current_tf);
  * @param arg Argument to pass to entry point
  * @return -1 on error (never returns on success)
  */
-int process_exec(void (*entry_point)(void *), void *arg);
+/* process_exec removed — exec is implemented via elf_exec_replace() / SYS_EXECVE */
 
 /**
  * Create a new user-mode process
@@ -296,21 +296,39 @@ int process_exec(void (*entry_point)(void *), void *arg);
 struct process *process_create_user(const char *name, void *user_code, size_t code_size);
 
 /**
+ * ELF segment permission info for process_create_elf
+ */
+#define ELF_PF_X  0x1   /* Execute */
+#define ELF_PF_W  0x2   /* Write */
+#define ELF_PF_R  0x4   /* Read */
+
+typedef struct {
+    uint64_t vaddr;     /* Segment virtual address */
+    uint64_t memsz;     /* Segment size in memory */
+    uint32_t flags;     /* ELF p_flags (PF_R, PF_W, PF_X) */
+} elf_segment_info_t;
+
+/**
  * Create a new user process from loaded ELF segments
- * 
+ *
  * This function is similar to process_create_user but allows specifying
  * custom virtual address base and entry point for loaded ELF programs.
+ * Per-segment permissions are applied from the segments array.
  * 
  * @param name Process name
  * @param code_base Virtual address base where code should be mapped
  * @param code_mem Physical address of loaded code (page-aligned)
  * @param code_size Size of code in bytes
  * @param entry_point Entry point virtual address
+ * @param segments Array of segment permission info (may be NULL for RWX fallback)
+ * @param num_segments Number of entries in segments array
  * @return Pointer to new process, or NULL on failure
  */
 struct process *process_create_elf(const char *name, uint64_t code_base, 
                                    void *code_mem, size_t code_size, 
-                                   uint64_t entry_point);
+                                   uint64_t entry_point,
+                                   const elf_segment_info_t *segments,
+                                   int num_segments);
 
 /**
  * Return to user mode (assembly function)

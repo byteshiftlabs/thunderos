@@ -63,7 +63,7 @@ int elf_load_exec(const char *path, const char *argv[], int argc) {
     (void)argc;
     
     /* Open file */
-    int fd = vfs_open(path, O_RDONLY);
+    int fd = vfs_open(path, O_RDONLY, 0);
     if (fd < 0) {
         /* errno already set by vfs_open */
         return -1;
@@ -198,6 +198,30 @@ int elf_load_exec(const char *path, const char *argv[], int argc) {
         }
     }
     
+    /* Build segment info for per-segment permissions */
+    int num_load_segments = 0;
+    for (int i = 0; i < ehdr.phnum; i++) {
+        if (phdrs[i].type == PT_LOAD) {
+            num_load_segments++;
+        }
+    }
+    
+    elf_segment_info_t *seg_info = NULL;
+    if (num_load_segments > 0) {
+        seg_info = kmalloc((size_t)num_load_segments * sizeof(elf_segment_info_t));
+        if (seg_info) {
+            int s = 0;
+            for (int i = 0; i < ehdr.phnum; i++) {
+                if (phdrs[i].type == PT_LOAD) {
+                    seg_info[s].vaddr = phdrs[i].vaddr;
+                    seg_info[s].memsz = phdrs[i].memsz;
+                    seg_info[s].flags = phdrs[i].flags;
+                    s++;
+                }
+            }
+        }
+    }
+    
     /* Done with file and program headers */
     vfs_close(fd);
     kfree(phdrs);
@@ -211,7 +235,9 @@ int elf_load_exec(const char *path, const char *argv[], int argc) {
     }
     
     /* Create user process with loaded code and custom entry point */
-    struct process *proc = process_create_elf(program_name, min_addr, program_mem_phys, total_size, ehdr.entry);
+    struct process *proc = process_create_elf(program_name, min_addr, program_mem_phys, total_size, ehdr.entry, seg_info, num_load_segments);
+    
+    if (seg_info) kfree(seg_info);
     
     if (!proc) {
         pmm_free_pages(program_phys, num_pages);
@@ -279,7 +305,7 @@ int elf_exec_replace(const char *path, const char *argv[], int argc, struct trap
     const char *kpath = path_buf;
 
     /* Open file */
-    int fd = vfs_open(kpath, O_RDONLY);
+    int fd = vfs_open(kpath, O_RDONLY, 0);
     if (fd < 0) {
         return -1;
     }
@@ -405,6 +431,30 @@ int elf_exec_replace(const char *path, const char *argv[], int argc, struct trap
         }
     }
     
+    /* Build segment info for per-segment permissions */
+    int num_load_segments = 0;
+    for (int i = 0; i < ehdr.phnum; i++) {
+        if (phdrs[i].type == PT_LOAD) {
+            num_load_segments++;
+        }
+    }
+    
+    elf_segment_info_t *seg_info = NULL;
+    if (num_load_segments > 0) {
+        seg_info = kmalloc((size_t)num_load_segments * sizeof(elf_segment_info_t));
+        if (seg_info) {
+            int s = 0;
+            for (int i = 0; i < ehdr.phnum; i++) {
+                if (phdrs[i].type == PT_LOAD) {
+                    seg_info[s].vaddr = phdrs[i].vaddr;
+                    seg_info[s].memsz = phdrs[i].memsz;
+                    seg_info[s].flags = phdrs[i].flags;
+                    s++;
+                }
+            }
+        }
+    }
+    
     vfs_close(fd);
     kfree(phdrs);
     
@@ -450,7 +500,27 @@ int elf_exec_replace(const char *path, const char *argv[], int argc, struct trap
         uintptr_t vaddr = min_addr + (i * PAGE_SIZE);
         uintptr_t paddr = program_phys + (i * PAGE_SIZE);
         
-        uint64_t flags = PTE_V | PTE_R | PTE_W | PTE_X | PTE_U;
+        /* Determine page permissions from ELF segment info */
+        uint64_t flags = PTE_V | PTE_U;
+        if (seg_info && num_load_segments > 0) {
+            uint32_t sf = 0;
+            for (int s = 0; s < num_load_segments; s++) {
+                uint64_t seg_start = seg_info[s].vaddr;
+                uint64_t seg_end = seg_start + seg_info[s].memsz;
+                if (vaddr >= seg_start && vaddr < seg_end) {
+                    sf = seg_info[s].flags;
+                    break;
+                }
+            }
+            if (sf & ELF_PF_R) flags |= PTE_R;
+            if (sf & ELF_PF_W) flags |= PTE_W;
+            if (sf & ELF_PF_X) flags |= PTE_X;
+            if (!(flags & (PTE_R | PTE_W | PTE_X))) {
+                flags |= PTE_R | PTE_W | PTE_X;
+            }
+        } else {
+            flags |= PTE_R | PTE_W | PTE_X;
+        }
         
         if (map_page(proc->page_table, vaddr, paddr, flags) != 0) {
             /* Critical error - can't recover */
@@ -460,6 +530,8 @@ int elf_exec_replace(const char *path, const char *argv[], int argc, struct trap
             process_exit(-1);
         }
     }
+    
+    if (seg_info) kfree(seg_info);
     
     /* 3. Add VMA for the new program */
     if (process_add_vma(proc, min_addr, max_addr, VM_READ | VM_WRITE | VM_EXEC | VM_USER) != 0) {

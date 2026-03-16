@@ -534,9 +534,9 @@ int process_get_max_count(void) {
  * User process sleep
  * 
  * Marks process as sleeping and yields to scheduler.
- * TODO: Implement timer-based wakeup queue for actual sleep functionality.
+ * Process is woken by process_check_sleepers() when deadline passes.
  * 
- * @param ticks Number of ticks to sleep (currently unused)
+ * @param ticks Number of timer ticks to sleep
  */
 void process_sleep(uint64_t ticks) {
     struct process *proc = current_process;
@@ -813,17 +813,6 @@ pid_t process_fork(struct trap_frame *current_tf) {
 }
 
 /**
- * Execute a new program in the current process
- * TODO: Implement exec
- */
-int process_exec(void (*entry_point)(void *), void *arg) {
-    hal_uart_puts("process_exec: not yet implemented\n");
-    (void)entry_point;
-    (void)arg;
-    return -1;
-}
-
-/**
  * Create a new user mode process
  * 
  * Creates a process with isolated page table and unprivileged execution context.
@@ -958,7 +947,9 @@ struct process *process_create_user(const char *name, void *user_code, size_t co
  */
 struct process *process_create_elf(const char *name, uint64_t code_base, 
                                    void *code_mem, size_t code_size, 
-                                   uint64_t entry_point) {
+                                   uint64_t entry_point,
+                                   const elf_segment_info_t *segments,
+                                   int num_segments) {
     if (!name || !code_mem || code_size == 0) {
         return NULL;
     }
@@ -998,10 +989,32 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
         uintptr_t vaddr = code_base + ((size_t)i * PAGE_SIZE);
         uintptr_t paddr = (uintptr_t)code_mem + ((size_t)i * PAGE_SIZE);
         
-        // Map as user-readable, writable, and executable
-        // TODO: Use proper segment permissions from ELF (R/W/X per segment)
-        if (map_page(proc->page_table, vaddr, paddr, 
-                           PTE_V | PTE_R | PTE_W | PTE_X | PTE_U) != 0) {
+        // Determine page permissions from ELF segment info
+        uint64_t pte_flags = PTE_V | PTE_U;
+        if (segments && num_segments > 0) {
+            // Find which segment this page belongs to
+            uint32_t seg_flags = 0;
+            for (int s = 0; s < num_segments; s++) {
+                uint64_t seg_start = segments[s].vaddr;
+                uint64_t seg_end = seg_start + segments[s].memsz;
+                if (vaddr >= seg_start && vaddr < seg_end) {
+                    seg_flags = segments[s].flags;
+                    break;
+                }
+            }
+            if (seg_flags & ELF_PF_R) pte_flags |= PTE_R;
+            if (seg_flags & ELF_PF_W) pte_flags |= PTE_W;
+            if (seg_flags & ELF_PF_X) pte_flags |= PTE_X;
+            // Ensure at least readable if no flags matched
+            if (!(pte_flags & (PTE_R | PTE_W | PTE_X))) {
+                pte_flags |= PTE_R | PTE_W | PTE_X;
+            }
+        } else {
+            // Fallback: map as RWX when no segment info available
+            pte_flags |= PTE_R | PTE_W | PTE_X;
+        }
+        
+        if (map_page(proc->page_table, vaddr, paddr, pte_flags) != 0) {
             free_page_table(proc->page_table);
             kfree((void *)proc->kernel_stack);
             process_free(proc);
@@ -1352,8 +1365,7 @@ int process_map_region(struct process *proc, uint64_t vaddr, uint64_t size, uint
     for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
         uintptr_t phys_page = pmm_alloc_page();
         if (!phys_page) {
-            // TODO: Cleanup already mapped pages
-            RETURN_ERRNO(THUNDEROS_ENOMEM);
+            goto cleanup_pages;
         }
         
         // Zero the page
@@ -1362,20 +1374,28 @@ int process_map_region(struct process *proc, uint64_t vaddr, uint64_t size, uint
         // Map the page
         if (map_page(proc->page_table, addr, phys_page, pte_flags) != 0) {
             pmm_free_page(phys_page);
-            // TODO: Cleanup already mapped pages
-            /* errno already set by map_page */
-            return -1;
+            goto cleanup_pages;
         }
     }
     
     // Add VMA to track this region
     if (process_add_vma(proc, start, end, flags) != 0) {
-        // TODO: Cleanup mapped pages
-        /* errno already set by process_add_vma */
-        return -1;
+        goto cleanup_pages;
     }
     
     return 0;
+
+cleanup_pages:
+    /* Unmap and free all pages mapped so far in [start, end) */
+    for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
+        uintptr_t paddr;
+        if (virt_to_phys(proc->page_table, addr, &paddr) == 0) {
+            unmap_page(proc->page_table, addr);
+            pmm_free_page(paddr);
+        }
+    }
+    set_errno(THUNDEROS_ENOMEM);
+    return -1;
 }
 
 /**

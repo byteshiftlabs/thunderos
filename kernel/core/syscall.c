@@ -389,13 +389,12 @@ uint64_t sys_open(const char *path, int flags, int mode) {
         vfs_flags |= O_APPEND;
     }
     
-    int fd = vfs_open(path, vfs_flags);
+    int fd = vfs_open(path, vfs_flags, mode);
     
     if (fd < 0) {
         return SYSCALL_ERROR;
     }
 
-    (void)mode; // TODO: Use mode for file permissions
     return fd;
 }
 
@@ -754,9 +753,19 @@ uint64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, uint64
         return SYSCALL_ERROR;
     }
     
-    (void)fd;      // TODO: Implement file-backed mappings
-    (void)offset;  // TODO: Implement file offset
-    (void)flags;   // TODO: Handle MAP_SHARED vs MAP_PRIVATE
+    /* Reject unsupported features with proper errno */
+    if (!(flags & MAP_ANONYMOUS)) {
+        set_errno(THUNDEROS_ENOSYS);  /* File-backed mappings not implemented */
+        return SYSCALL_ERROR;
+    }
+    if (fd != -1) {
+        set_errno(THUNDEROS_EINVAL);  /* fd must be -1 for MAP_ANONYMOUS */
+        return SYSCALL_ERROR;
+    }
+    if (offset != 0) {
+        set_errno(THUNDEROS_EINVAL);  /* Offset not supported for anonymous mappings */
+        return SYSCALL_ERROR;
+    }
     
     // Determine mapping address
     uint64_t map_addr;
@@ -2096,6 +2105,7 @@ uint64_t syscall_handler(uint64_t syscall_number,
             break;
             
         case SYS_EXEC:
+            set_errno(THUNDEROS_ENOSYS);
             return_value = SYSCALL_ERROR;
             break;
             

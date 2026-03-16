@@ -287,8 +287,20 @@ void paging_init(uintptr_t kernel_start, uintptr_t kernel_end) {
         return;
     }
     
-    // TODO: Map kernel to higher half (KERNEL_VIRT_BASE)
-    // This requires updating linker script and entry point
+    /*
+     * Known limitation: Kernel uses identity mapping (virt == phys).
+     *
+     * A production kernel should map to higher half (e.g., 0xFFFFFFC000000000)
+     * to enforce user/kernel address space separation and prevent user code from
+     * guessing kernel virtual addresses. Migration requires:
+     *   1. Linker script: set kernel VMA to KERNEL_VIRT_BASE
+     *   2. Boot assembly: set up trampoline mapping before jumping to C code
+     *   3. All MMIO accesses: translate physical to kernel-virtual addresses
+     *   4. Physical memory allocator: return phys addresses, translate on use
+     *
+     * Identity mapping is acceptable for v0.9.0 since user processes already
+     * run in isolated Sv39 page tables with PTE_U separation.
+     */
     
     // Enable paging
     hal_uart_puts("Enabling paging...\n");
@@ -472,8 +484,7 @@ int map_user_code(page_table_t *page_table, uintptr_t user_vaddr,
         // Allocate physical page from physical memory manager
         uintptr_t phys_page = pmm_alloc_page();
         if (phys_page == 0) {
-            // TODO: Clean up previously allocated pages
-            RETURN_ERRNO(THUNDEROS_ENOMEM);
+            goto cleanup_pages;
         }
         
         // Zero the page first (security: clear any old data)
@@ -512,12 +523,24 @@ int map_user_code(page_table_t *page_table, uintptr_t user_vaddr,
         uintptr_t map_vaddr = vaddr + (i * PAGE_SIZE);
         if (map_page(page_table, map_vaddr, phys_page, PTE_USER_TEXT) != 0) {
             pmm_free_page(phys_page);
-            /* errno already set by map_page */
-            return -1;
+            goto cleanup_pages;
         }
     }
     
     return 0;
+
+cleanup_pages:
+    /* Free all pages mapped so far (0..i-1 succeeded) */
+    for (size_t j = 0; j < num_pages; j++) {
+        uintptr_t mapped_vaddr = vaddr + (j * PAGE_SIZE);
+        uintptr_t paddr;
+        if (virt_to_phys(page_table, mapped_vaddr, &paddr) == 0) {
+            unmap_page(page_table, mapped_vaddr);
+            pmm_free_page(paddr);
+        }
+    }
+    set_errno(THUNDEROS_ENOMEM);
+    return -1;
 }
 
 /**
