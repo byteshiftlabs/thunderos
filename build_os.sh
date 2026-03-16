@@ -67,12 +67,15 @@ main() {
     fi
     
     echo ""
-    echo "Build complete! Run with:"
-    echo "  qemu-system-riscv64 -M virt -m 128M -nographic -serial mon:stdio \\"
-    echo "    -bios none -kernel ${KERNEL_ELF} \\"
-    echo "    -drive file=${FS_IMG},if=none,format=raw,id=hd0 \\"
-    echo "    -device virtio-blk-device,drive=hd0 \\"
-    echo "    -global virtio-mmio.force-legacy=false"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "  Build Complete!"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo ""
+    echo "Run ThunderOS with:"
+    echo "  ./run_os.sh"
+    echo ""
+    echo "Or use make target:"
+    echo "  make qemu"
 }
 
 main "$@"

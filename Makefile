@@ -256,14 +256,21 @@ force_fs: userland
 	@echo ""
 
 userland:
-	@echo ""
-	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
-	@echo "$(BOLD)$(BLUE)  Building Userland Programs$(RESET)"
-	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
-	@chmod +x build_userland.sh
-	@./build_userland.sh
-	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
-	@echo ""
+	@if [ ! -f userland/lib/user.ld ]; then \
+		echo ""; \
+		echo "$(YELLOW)⚠ Userland submodule not initialized — skipping userland build$(RESET)"; \
+		echo "  Run: git submodule update --init"; \
+		echo ""; \
+	 else \
+		echo ""; \
+		echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"; \
+		echo "$(BOLD)$(BLUE)  Building Userland Programs$(RESET)"; \
+		echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"; \
+		chmod +x build_userland.sh; \
+		./build_userland.sh; \
+		echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"; \
+		echo ""; \
+	fi
 
 test:
 	@cd tests/scripts && bash test_runner.sh
