@@ -8,6 +8,7 @@
 #include "mm/pmm.h"
 #include "kernel/panic.h"
 #include "hal/hal_uart.h"
+#include "arch/interrupt.h"
 
 // Bitmap allocation constants
 #define BITS_PER_BYTE 8
@@ -115,6 +116,7 @@ void pmm_init(uintptr_t mem_start, size_t mem_size) {
  * Allocate a single physical page
  */
 uintptr_t pmm_alloc_page(void) {
+    uint64_t flags = interrupt_save_disable();
     // Find first free page in bitmap
     for (size_t page_num = 0; page_num < total_pages; page_num++) {
         if (!bitmap_test(page_num)) {
@@ -124,10 +126,12 @@ uintptr_t pmm_alloc_page(void) {
             
             // Calculate physical address
             uintptr_t page_addr = memory_start + (page_num * PAGE_SIZE);
+            interrupt_restore(flags);
             return page_addr;
         }
     }
     
+    interrupt_restore(flags);
     // Out of memory!
     hal_uart_puts("PMM: Out of memory!\n");
     return 0;
@@ -151,6 +155,7 @@ uintptr_t pmm_alloc_pages(size_t num_pages) {
         return 0;
     }
     
+    uint64_t flags = interrupt_save_disable();
     // Search for contiguous free pages
     for (size_t start_page = 0; start_page <= total_pages - num_pages; start_page++) {
         // Check if we have num_pages contiguous free pages starting at start_page
@@ -170,9 +175,11 @@ uintptr_t pmm_alloc_pages(size_t num_pages) {
             }
             
             // Return physical address of first page
+            interrupt_restore(flags);
             return memory_start + (start_page * PAGE_SIZE);
         }
     }
+    interrupt_restore(flags);
     
     // Could not find contiguous pages
     hal_uart_puts("PMM: Could not allocate ");
@@ -215,8 +222,10 @@ void pmm_free_page(uintptr_t page_addr) {
         return;
     }
     
+    uint64_t flags = interrupt_save_disable();
     // Check if page is actually allocated
     if (!bitmap_test(page_num)) {
+        interrupt_restore(flags);
         hal_uart_puts("PMM: Warning - freeing already-free page\n");
         return;
     }
@@ -224,6 +233,7 @@ void pmm_free_page(uintptr_t page_addr) {
     // Free the page
     bitmap_clear(page_num);
     free_pages++;
+    interrupt_restore(flags);
 }
 
 /**
