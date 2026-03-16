@@ -14,6 +14,7 @@
 #include "kernel/wait_queue.h"
 #include "mm/kmalloc.h"
 #include "kernel/kstring.h"
+#include "arch/interrupt.h"
 
 /**
  * Initialize pipe subsystem
@@ -106,6 +107,9 @@ int pipe_read(pipe_t* pipe, void* buffer, size_t count) {
     char* dest = (char*)buffer;
     size_t bytes_read = 0;
 
+    // Protect buffer operations from preemption
+    uint64_t flags = interrupt_save_disable();
+
     // Handle circular buffer wraparound
     while (bytes_read < to_read) {
         size_t chunk_size = to_read - bytes_read;
@@ -121,6 +125,8 @@ int pipe_read(pipe_t* pipe, void* buffer, size_t count) {
     }
 
     pipe->data_size -= bytes_read;
+
+    interrupt_restore(flags);
 
     // Wake any writers waiting for space
     if (bytes_read > 0) {
@@ -187,6 +193,9 @@ int pipe_write(pipe_t* pipe, const void* buffer, size_t count) {
     const char* src = (const char*)buffer;
     size_t bytes_written = 0;
 
+    // Protect buffer operations from preemption
+    uint64_t wflags = interrupt_save_disable();
+
     // Handle circular buffer wraparound
     while (bytes_written < to_write) {
         size_t chunk_size = to_write - bytes_written;
@@ -202,6 +211,8 @@ int pipe_write(pipe_t* pipe, const void* buffer, size_t count) {
     }
 
     pipe->data_size += bytes_written;
+
+    interrupt_restore(wflags);
 
     // Wake any readers waiting for data
     if (bytes_written > 0) {
