@@ -539,13 +539,34 @@ void process_sleep(uint64_t ticks) {
     struct process *proc = current_process;
     if (!proc) return;
     
+    extern uint64_t hal_timer_get_ticks(void);
+    
     lock_acquire(&process_lock);
+    proc->sleep_until_tick = hal_timer_get_ticks() + ticks;
     proc->state = PROC_SLEEPING;
-    // TODO: Add to sleep queue with wakeup time
-    (void)ticks;  // Mark unused parameter
+    scheduler_dequeue(proc);
     lock_release(&process_lock);
     
     process_yield();
+}
+
+/**
+ * Check timed sleepers and wake those whose deadline has passed
+ * 
+ * Called from the timer interrupt handler on every tick.
+ */
+void process_check_sleepers(void) {
+    extern uint64_t hal_timer_get_ticks(void);
+    uint64_t now = hal_timer_get_ticks();
+    
+    for (int i = 0; i < MAX_PROCS; i++) {
+        struct process *p = &process_table[i];
+        if (p->state == PROC_SLEEPING && p->sleep_until_tick != 0 && now >= p->sleep_until_tick) {
+            p->sleep_until_tick = 0;
+            p->state = PROC_READY;
+            scheduler_enqueue(p);
+        }
+    }
 }
 
 /**

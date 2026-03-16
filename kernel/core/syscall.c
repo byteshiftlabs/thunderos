@@ -266,51 +266,13 @@ uint64_t sys_sleep(uint64_t milliseconds) {
         return SYSCALL_SUCCESS;
     }
     
-    /* Get current time */
-    extern uint64_t hal_timer_get_ticks(void);
-    uint64_t start_ticks = hal_timer_get_ticks();
-    
-    /* Each tick is TIMER_TICK_MS milliseconds
-     * So to sleep N ms, we need N/TIMER_TICK_MS ticks
-     * But to avoid losing precision, round up: (N + TIMER_TICK_MS-1) / TIMER_TICK_MS
-     */
+    /* Each tick is TIMER_TICK_MS milliseconds.
+     * Round up to avoid sleeping less than requested. */
     uint64_t ticks_to_wait = (milliseconds + TIMER_TICK_MS - 1) / TIMER_TICK_MS;
     if (ticks_to_wait == 0) ticks_to_wait = 1;
     
-    uint64_t target_ticks = start_ticks + ticks_to_wait;
-    
-    /* Enable interrupts so timer interrupts can fire during sleep.
-     * 
-     * When we enter a syscall via trap, interrupts are disabled by hardware.
-     * We need to re-enable them so the timer can update the tick count.
-     * 
-     * CRITICAL: Before enabling interrupts, we must clear sscratch.
-     * The trap entry uses sscratch to detect user vs kernel mode:
-     * - sscratch == 0 means we were in kernel mode
-     * - sscratch != 0 means we were in user mode (contains kernel stack)
-     * If we don't clear it, the trap handler will think we came from user
-     * mode and corrupt the stack.
-     * 
-     * Save sscratch first, then clear it, enable interrupts.
-     */
-    uint64_t saved_sscratch;
-    __asm__ volatile("csrrw %0, sscratch, zero" : "=r"(saved_sscratch));
-    
-    /* Enable SIE (Supervisor Interrupt Enable) bit in sstatus. */
-    __asm__ volatile("csrs sstatus, %0" :: "r"(1UL << 1));
-    
-    /* Wait until enough ticks have passed.
-     * Use WFI to wait for next interrupt instead of spinning.
-     */
-    while (hal_timer_get_ticks() < target_ticks) {
-        __asm__ volatile("wfi");
-    }
-    
-    /* Disable interrupts before restoring sscratch */
-    __asm__ volatile("csrc sstatus, %0" :: "r"(1UL << 1));
-    
-    /* Restore sscratch for proper return to user mode */
-    __asm__ volatile("csrw sscratch, %0" :: "r"(saved_sscratch));
+    extern void process_sleep(uint64_t ticks);
+    process_sleep(ticks_to_wait);
     
     return SYSCALL_SUCCESS;
 }

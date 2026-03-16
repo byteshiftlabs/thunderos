@@ -62,6 +62,10 @@ void hal_timer_handle_interrupt(void) {
         vterm_poll_input();
     }
     
+    // Wake processes whose timed sleep has elapsed
+    extern void process_check_sleepers(void);
+    process_check_sleepers();
+    
     // Preemptive multitasking
     extern void schedule(void);
     schedule();

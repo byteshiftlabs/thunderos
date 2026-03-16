@@ -143,6 +143,9 @@ struct process {
     
     // Console multiplexing
     int controlling_tty;                // Controlling terminal index (-1 = none)
+    
+    // Timed sleep support
+    uint64_t sleep_until_tick;          // Wake after this tick (0 = not timed)
 };
 
 /**
