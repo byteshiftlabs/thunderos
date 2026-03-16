@@ -68,6 +68,12 @@ gtest_suite_end() {
     printf "[${_B}----------${_N}] %s\n\n" "$1"
 }
 
+# Write pass/fail counts to FILE so a parent script can aggregate totals.
+# Format is two lines: "PASS N" and "FAIL N".
+gtest_export_counts() {
+    printf 'PASS %d\nFAIL %d\n' "$_GT_PASS" "$_GT_FAIL" > "$1"
+}
+
 # Print final summary. Returns 1 if any test failed.
 gtest_summary() {
     local elapsed="${1:-0}" total=$((_GT_PASS + _GT_FAIL))

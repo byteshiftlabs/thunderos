@@ -134,5 +134,6 @@ gtest_suite_end "Stability"
 
 gtest_summary "${T_ELAPSED}"
 RESULT=$?
+gtest_export_counts "${OUTPUT_DIR}/.kernel_counts"
 printf "  Full output: %s\n" "${OUTPUT_FILE}"
 exit $RESULT

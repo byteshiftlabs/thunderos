@@ -102,5 +102,6 @@ gtest_suite_end "Integration"
 
 gtest_summary "${T_ELAPSED}"
 RESULT=$?
+gtest_export_counts "${OUTPUT_DIR}/.integration_counts"
 printf "  Full output: %s\n" "${OUTPUT_FILE}"
 exit $RESULT
