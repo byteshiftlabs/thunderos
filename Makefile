@@ -31,7 +31,7 @@ TEST_MODE ?= 0
 # Compiler flags
 CFLAGS := -march=rv64gc -mabi=lp64d -mcmodel=medany
 CFLAGS += -nostdlib -nostartfiles -ffreestanding -fno-common
-CFLAGS += -O0 -g -Wall -Wextra
+CFLAGS += -O0 -g -Wall -Wextra -Werror
 CFLAGS += -I$(INCLUDE_DIR)
 
 # Enable kernel tests (set ENABLE_TESTS=0 to disable)
@@ -67,7 +67,8 @@ ifeq ($(ENABLE_TESTS),1)
                         tests/unit/test_vterm.c \
                         tests/unit/test_pmm.c \
                         tests/unit/test_kmalloc.c \
-                        tests/unit/test_errno.c
+                        tests/unit/test_errno.c \
+                        tests/unit/test_ext2_vfs.c
 endif
 
 KERNEL_ASM_SOURCES := $(wildcard $(KERNEL_DIR)/arch/riscv64/*.S)

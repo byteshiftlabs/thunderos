@@ -37,11 +37,11 @@ static int read_block(void *device, uint32_t block_num, void *buffer, uint32_t b
 static int write_block(void *device, uint32_t block_num, const void *buffer, uint32_t block_size) {
     (void)device;
     
-    uint32_t sector = (block_num * block_size) / 512;
-    uint32_t num_sectors = block_size / 512;
+    uint32_t sector = (block_num * block_size) / SECTOR_SIZE;
+    uint32_t num_sectors = block_size / SECTOR_SIZE;
     
     for (uint32_t i = 0; i < num_sectors; i++) {
-        int ret = virtio_blk_write(sector + i, (const uint8_t *)buffer + ((size_t)i * 512), 1);
+        int ret = virtio_blk_write(sector + i, (const uint8_t *)buffer + ((size_t)i * SECTOR_SIZE), 1);
         if (ret != 1) {
             set_errno(THUNDEROS_EIO);
             return -1;
@@ -352,6 +352,7 @@ int ext2_write_file(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t offset,
     inode->i_blocks = (total_blocks * fs->block_size) / SECTOR_SIZE;
     
     kfree(block_buffer);
+    clear_errno();
     return bytes_written;
 }
 
@@ -874,6 +875,7 @@ static int remove_dir_entry(ext2_fs_t *fs, ext2_inode_t *dir_inode,
     ret = ext2_write_file(fs, dir_inode, 0, dir_buffer, dir_size);
     if (ret < 0) {
         kfree(dir_buffer);
+        /* errno already set by ext2_write_file */
         return -1;
     }
     
@@ -881,6 +883,7 @@ static int remove_dir_entry(ext2_fs_t *fs, ext2_inode_t *dir_inode,
     ret = ext2_write_inode(fs, dir_inode_num, dir_inode);
     if (ret < 0) {
         kfree(dir_buffer);
+        /* errno already set by ext2_write_inode */
         return -1;
     }
     
@@ -910,6 +913,7 @@ static int is_dir_empty(ext2_fs_t *fs, ext2_inode_t *dir_inode) {
     int ret = ext2_read_file(fs, dir_inode, 0, dir_buffer, dir_inode->i_size);
     if (ret < 0) {
         kfree(dir_buffer);
+        /* errno already set by ext2_read_file */
         return -1;
     }
     
@@ -962,6 +966,7 @@ int ext2_remove_file(ext2_fs_t *fs, uint32_t dir_inode_num, const char *name) {
     ext2_inode_t dir_inode;
     int ret = ext2_read_inode(fs, dir_inode_num, &dir_inode);
     if (ret < 0) {
+        /* errno already set by ext2_read_inode */
         return -1;
     }
     

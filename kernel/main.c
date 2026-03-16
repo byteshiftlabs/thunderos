@@ -49,6 +49,7 @@ extern void test_v070_features(void);
 extern void test_pmm(void);
 extern void test_kmalloc(void);
 extern void test_errno(void);
+extern void test_vfs_all(void);
 #endif
 
 /* Forward declarations for helper functions */
@@ -396,6 +397,9 @@ void kernel_main(void) {
 
     if (init_block_device() == 0) {
         init_filesystem();
+#ifdef ENABLE_KERNEL_TESTS
+        test_vfs_all();
+#endif
     }
 
     /* Try to initialize GPU (optional - console works without it) */
