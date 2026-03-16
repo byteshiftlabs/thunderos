@@ -135,11 +135,14 @@ static struct process *alloc_process(void) {
  * Get process by PID
  */
 struct process *process_get(pid_t pid) {
+    lock_acquire(&process_lock);
     for (int i = 0; i < MAX_PROCS; i++) {
         if (process_table[i].pid == pid && process_table[i].state != PROC_UNUSED) {
+            lock_release(&process_lock);
             return &process_table[i];
         }
     }
+    lock_release(&process_lock);
     return NULL;
 }
 
@@ -504,10 +507,13 @@ struct process *process_get_by_index(int index) {
         return NULL;
     }
     
+    lock_acquire(&process_lock);
     struct process *p = &process_table[index];
     if (p->state == PROC_UNUSED) {
+        lock_release(&process_lock);
         return NULL;
     }
+    lock_release(&process_lock);
     
     return p;
 }
