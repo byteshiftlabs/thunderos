@@ -153,10 +153,14 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
             return SYSCALL_ERROR;
         }
         
-        // Child exists but hasn't exited/stopped yet - sleep and try again
+        // Child exists but hasn't exited/stopped yet - sleep until SIGCHLD
+        uint64_t flags = interrupt_save_disable();
         current->state = PROC_SLEEPING;
-        scheduler_yield();
-        current->state = PROC_RUNNING;
+        extern void scheduler_dequeue(struct process *proc);
+        scheduler_dequeue(current);
+        interrupt_restore(flags);
+        extern void schedule(void);
+        schedule();
     }
 }
 
