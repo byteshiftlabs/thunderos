@@ -332,10 +332,7 @@ uint64_t sys_getppid(void) {
         return 0;
     }
     
-    // Return ppid if available (currently PCB doesn't have ppid field)
-    // For now, return 0 (init process has no parent)
-    // TODO: Add ppid field to PCB structure
-    return 0;
+    return current_process->parent ? current_process->parent->pid : 0;
 }
 
 /**
@@ -1398,8 +1395,8 @@ uint64_t sys_uname(utsname_t *buf) {
     
     COPY_STR(buf->sysname, "ThunderOS");
     COPY_STR(buf->nodename, "thunderos");
-    COPY_STR(buf->release, "0.7.0");
-    COPY_STR(buf->version, "v0.7.0 Virtual Terminals");
+    COPY_STR(buf->release, "0.10.0");
+    COPY_STR(buf->version, "v0.10.0 Synchronization");
     COPY_STR(buf->machine, "riscv64");
     
     #undef COPY_STR

@@ -59,7 +59,7 @@ sighandler_t signal_default_action(int signum) {
             return SIG_DFL;  // Will use signal_default_term
         case SIGUSR1:
         case SIGUSR2:
-            return SIG_IGN;  // Ignore by default
+            return SIG_DFL;  // Terminate by default (POSIX)
             
         // Signals that stop the process
         case SIGSTOP:
