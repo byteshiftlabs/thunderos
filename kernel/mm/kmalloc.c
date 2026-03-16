@@ -12,8 +12,9 @@
 #include "kernel/errno.h"
 #include "hal/hal_uart.h"
 
-// Allocation header (stored at start of each allocation)
+// Allocation header (stored immediately before the returned pointer)
 struct kmalloc_header {
+    uintptr_t base_page;   // Start of PMM allocation (for aligned allocs)
     size_t size;           // Size of allocation in bytes
     size_t pages;          // Number of pages allocated
     unsigned int magic;    // Magic number for validation
@@ -51,6 +52,7 @@ void *kmalloc(size_t size) {
     
     // Set up allocation header
     struct kmalloc_header *header = (struct kmalloc_header *)page_addr;
+    header->base_page = page_addr;
     header->size = size;
     header->pages = pages_needed;
     header->magic = KMALLOC_MAGIC;
@@ -77,8 +79,8 @@ void kfree(void *ptr) {
         kernel_panic("kfree: Invalid pointer or corrupted heap header");
     }
     
-    // Free pages
-    uintptr_t page_addr = (uintptr_t)header;
+    // Free pages (base_page tracks the real PMM allocation start)
+    uintptr_t page_addr = header->base_page;
     if (header->pages == 1) {
         pmm_free_page(page_addr);
     } else {
@@ -88,15 +90,60 @@ void kfree(void *ptr) {
 
 /**
  * Allocate aligned kernel memory
+ *
+ * For alignment <= HEADER_SIZE the normal kmalloc path works because
+ * HEADER_SIZE is always a multiple of sizeof(void*).
+ *
+ * For alignment > HEADER_SIZE (the typical case is PAGE_SIZE), we
+ * over-allocate so we can place the header just before the aligned
+ * boundary.  kfree() still works because it reads the header at
+ * ptr - HEADER_SIZE regardless of how the pointer was obtained.
  */
 void *kmalloc_aligned(size_t size, size_t align) {
-    // For now, just use kmalloc (pages are already 4KB aligned)
-    // TODO: Implement proper alignment support
-    if (align <= PAGE_SIZE) {
+    if (size == 0 || align == 0) {
+        return NULL;
+    }
+
+    /* Small alignments — kmalloc already satisfies them */
+    if (align <= HEADER_SIZE) {
         return kmalloc(size);
     }
-    
-    hal_uart_puts("kmalloc_aligned: Alignment > PAGE_SIZE not yet supported\n");
-    set_errno(THUNDEROS_ENOSYS);
-    return NULL;
+
+    /*
+     * We need an extra (align - 1) bytes of slack so that somewhere
+     * inside the allocation there is an address that is both:
+     *   (a) aligned to `align`, AND
+     *   (b) preceded by at least HEADER_SIZE bytes for the header.
+     *
+     * Total: HEADER_SIZE + (align - 1) + size
+     * Round up to whole pages for pmm_alloc.
+     */
+    size_t total = HEADER_SIZE + (align - 1) + size;
+    size_t pages_needed = (total + PAGE_SIZE - 1) / PAGE_SIZE;
+
+    uintptr_t base;
+    if (pages_needed == 1) {
+        base = pmm_alloc_page();
+    } else {
+        base = pmm_alloc_pages(pages_needed);
+    }
+    if (base == 0) {
+        set_errno(THUNDEROS_ENOMEM);
+        return NULL;
+    }
+
+    /* Find the first address >= base + HEADER_SIZE that is aligned */
+    uintptr_t raw = base + HEADER_SIZE;
+    uintptr_t aligned = (raw + align - 1) & ~(align - 1);
+
+    /* Place the header immediately before the aligned pointer */
+    struct kmalloc_header *header =
+        (struct kmalloc_header *)(aligned - HEADER_SIZE);
+    header->base_page = base;
+    header->size  = size;
+    header->pages = pages_needed;
+    header->magic = KMALLOC_MAGIC;
+
+    clear_errno();
+    return (void *)aligned;
 }
