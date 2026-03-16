@@ -490,7 +490,10 @@ Initial attempt at VirtIO block driver revealed fundamental gaps in memory infra
 
 ---
 
-## Version 0.11.0 - "Networking"
+## Version 0.11.0 - "Networking" *(Deferred)*
+
+**Status:** Deferred — networking prototype was removed during v0.9.0 code review.
+Will be revisited after core kernel hardening is complete.
 
 **Focus:** Network connectivity
 

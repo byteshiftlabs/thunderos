@@ -13,7 +13,7 @@ A lightweight RISC-V operating system for educational use, providing a clean fou
 - ✅ Reader-writer locks with writer priority
 - ✅ Blocking pipes (readers sleep when empty, writers when full)
 - ✅ 62 system calls implemented
-- 🚧 **Next**: VirtIO-net driver, TCP/IP stack (v0.10.0 Networking)
+- 🚧 **Next**: Code quality hardening and production readiness
 
 See [CHANGELOG.md](CHANGELOG.md) for complete feature list and [ROADMAP.md](ROADMAP.md) for future plans.
 
@@ -23,6 +23,11 @@ See [CHANGELOG.md](CHANGELOG.md) for complete feature list and [ROADMAP.md](ROAD
 ```bash
 git clone --recurse-submodules git@github.com:byteshiftlabs/thunderos.git
 ```
+
+> **Note:** The `userland/` directory is a git submodule. If you cloned without `--recurse-submodules`, run:
+> ```bash
+> git submodule update --init --recursive
+> ```
 
 ### Building
 ```bash

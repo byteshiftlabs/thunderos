@@ -2,9 +2,9 @@
 
 # -- Project information -----------------------------------------------------
 project = 'ThunderOS'
-copyright = '2025, ThunderOS Team'
+copyright = '2025-2026, ThunderOS Team'
 author = 'ThunderOS Team'
-release = '0.1.0'
+release = '0.9.0'
 
 # License information
 project_license = 'GPL v3'

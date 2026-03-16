@@ -12,7 +12,6 @@ Thank you for your interest in contributing to ThunderOS! This guide will help y
 
 2. **Check current status**
    - Look at the README banner for any active code freezes
-   - See [FREEZE.md](FREEZE.md) if a freeze is active
    - Review open issues and pull requests
 
 3. **Set up your environment**

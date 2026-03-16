@@ -90,8 +90,6 @@ ThunderOS v0.9.0 includes blocking I/O, synchronization primitives, and 62 syste
      - ✓ Implemented
    * - CI/CD Pipeline (GitHub Actions)
      - ✓ Implemented
-   * - Networking (VirtIO-net)
-     - 🚧 In Progress
 
 Indices and tables
 ==================

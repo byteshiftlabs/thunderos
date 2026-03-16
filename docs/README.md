@@ -269,8 +269,8 @@ open docs/build/html/index.html      # macOS
 ## Documentation Metrics
 
 Current documentation size:
-- **20 RST files** (14 internals + 6 RISC-V reference)
-- **~12,000+ lines** of documentation
+- **45 RST files** (30 internals + 7 RISC-V reference + 8 other)
+- **~26,000+ lines** of documentation
 - **~80+ code examples**
 - **~50+ diagrams/tables**
 - **100% coverage** of implemented components

@@ -1,6 +1,6 @@
 # ThunderOS Test Suite
 
-Automated test suite for ThunderOS v0.7.0+
+Automated test suite for ThunderOS v0.9.0+
 
 ## Directory Structure
 
@@ -74,10 +74,10 @@ These tests output results to the console and are verified by `test_kernel.sh`.
 
 Shell scripts that run QEMU non-interactively and verify output:
 
-- **`test_kernel.sh`** - Comprehensive test (17 checks)
+- **`test_kernel.sh`** - Comprehensive test (19 checks)
   - Kernel boot and initialization
   - All subsystem initialization
-  - Built-in test results
+  - Built-in test results (PMM, kmalloc, errno)
   - VirtIO and ext2 mounting
   - User-mode shell launch
 
@@ -87,7 +87,7 @@ Shell scripts that run QEMU non-interactively and verify output:
   - Memory management
   - Trap handler
 
-- **`test_integration.sh`** - Integration test (7 checks)
+- **`test_integration.sh`** - Integration test (5 checks)
   - VirtIO block device
   - ext2 filesystem
   - Shell startup
