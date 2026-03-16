@@ -357,10 +357,15 @@ void process_exit(int exit_code) {
         }
     }
     
-    // Save parent pointer before acquiring lock
-    struct process *parent = proc->parent;
+    // Save parent pointer under the lock to avoid TOCTOU race
+    struct process *parent = NULL;
     
     lock_acquire(&process_lock);
+    
+    // Read parent while holding lock — prevents race if parent exits concurrently
+    if (proc->parent && proc->parent->state != PROC_UNUSED) {
+        parent = proc->parent;
+    }
     
     // Mark as zombie and record exit code
     proc->state = PROC_ZOMBIE;
