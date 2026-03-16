@@ -52,8 +52,17 @@ char *kstrncpy(char *dest, const char *src, size_t n);
 size_t kstrlen(const char *str);
 
 /**
+ * Compare two strings
+ *
+ * @param s1 First string
+ * @param s2 Second string
+ * @return 0 if equal, negative if s1 < s2, positive if s1 > s2
+ */
+int kstrcmp(const char *s1, const char *s2);
+
+/**
  * Set memory to a value
- * 
+ *
  * @param s Memory area
  * @param c Value to set
  * @param n Number of bytes

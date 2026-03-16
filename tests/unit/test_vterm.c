@@ -18,9 +18,13 @@
 /* Forward declarations for vterm functions */
 extern int vterm_get_active(void);
 extern int vterm_switch(int terminal);
-extern void vterm_write_char(int terminal, char c);
-extern void vterm_write_string(int terminal, const char *str);
+extern void vterm_putc_to(int terminal, char c);
+extern void vterm_puts_to(int terminal, const char *str);
 extern int vterm_has_buffered_input_for(int terminal);
+
+/* Aliases used in this test file */
+#define vterm_write_char(t, c)   vterm_putc_to((t), (c))
+#define vterm_write_string(t, s) vterm_puts_to((t), (s))
 
 void test_vterm_features(void) {
     hal_uart_puts("\n");

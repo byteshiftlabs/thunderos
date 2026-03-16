@@ -45,6 +45,10 @@ ext2_fs_t g_root_ext2_fs;
 extern void test_memory_management(void);
 extern void test_elf_all(void);
 extern void run_memory_isolation_tests(void);
+extern void test_v070_features(void);
+extern void test_pmm(void);
+extern void test_kmalloc(void);
+extern void test_errno(void);
 #endif
 
 /* Forward declarations for helper functions */
@@ -166,6 +170,12 @@ static void run_memory_tests(void) {
     test_memory_management();
     test_elf_all();
     hal_uart_puts("[INFO] Built-in tests completed\n\n");
+
+    run_memory_isolation_tests();
+    test_v070_features();
+    test_pmm();
+    test_kmalloc();
+    test_errno();
 }
 #endif
 
