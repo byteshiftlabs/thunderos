@@ -68,11 +68,11 @@
   asm volatile("mv tp, %0" :: "r"(x)); })
 
 #define r_menvcfg() ({ unsigned long __tmp; \
-  asm volatile("csrr %0, menvcfg" : "=r"(__tmp)); \
+  asm volatile("csrr %0, 0x30A" : "=r"(__tmp)); \
   __tmp; })
 
 #define w_menvcfg(x) ({ \
-  asm volatile("csrw menvcfg, %0" :: "r"(x)); })
+  asm volatile("csrw 0x30A, %0" :: "r"(x)); })
 
 #define r_mcounteren() ({ unsigned long __tmp; \
   asm volatile("csrr %0, mcounteren" : "=r"(__tmp)); \
