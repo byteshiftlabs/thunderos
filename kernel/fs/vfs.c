@@ -34,6 +34,7 @@ static vfs_filesystem_t *g_root_fs = NULL;
 
 static int normalize_build_absolute(const char *path, char *working, size_t working_size);
 static int normalize_resolve_components(const char *working, char *normalized, size_t size);
+static int vfs_is_persistent_node(vfs_node_t *node);
 
 /* ========================================================================
  * Path normalization helpers
@@ -55,22 +56,38 @@ static int normalize_build_absolute(const char *path, char *working, size_t work
         struct process *current_process = process_current();
         if (current_process && current_process->cwd[0]) {
             const char *cwd = current_process->cwd;
-            while (*cwd && pos < working_size - 1) {
+            while (*cwd) {
+                if (pos >= working_size - 1) {
+                    set_errno(THUNDEROS_ERANGE);
+                    return -1;
+                }
                 working[pos++] = *cwd++;
             }
         } else {
             /* Default to root if no cwd set */
+            if (pos >= working_size - 1) {
+                set_errno(THUNDEROS_ERANGE);
+                return -1;
+            }
             working[pos++] = '/';
         }
         
         /* Ensure trailing slash for concatenation */
-        if (pos > 0 && working[pos - 1] != '/' && pos < working_size - 1) {
+        if (pos > 0 && working[pos - 1] != '/') {
+            if (pos >= working_size - 1) {
+                set_errno(THUNDEROS_ERANGE);
+                return -1;
+            }
             working[pos++] = '/';
         }
     }
     
     /* Append the input path */
-    while (*path && pos < working_size - 1) {
+    while (*path) {
+        if (pos >= working_size - 1) {
+            set_errno(THUNDEROS_ERANGE);
+            return -1;
+        }
         working[pos++] = *path++;
     }
     working[pos] = '\0';
@@ -90,7 +107,7 @@ static int normalize_build_absolute(const char *path, char *working, size_t work
  */
 static int normalize_resolve_components(const char *working, char *normalized, size_t size) {
     /* Component storage - each component is a null-terminated string */
-    static char component_storage[MAX_PATH_COMPONENTS][MAX_PATH_COMPONENT_LEN];
+    char component_storage[MAX_PATH_COMPONENTS][MAX_PATH_COMPONENT_LEN];
     int component_count = 0;
     
     const char *cursor = working;
@@ -117,17 +134,16 @@ static int normalize_resolve_components(const char *working, char *normalized, s
             /* At root, silently ignore (can't go above root) */
         } else {
             /* Regular component, copy to storage */
-            if (component_count < MAX_PATH_COMPONENTS) {
-                size_t copy_len = component_length;
-                if (copy_len >= MAX_PATH_COMPONENT_LEN) {
-                    copy_len = MAX_PATH_COMPONENT_LEN - 1;
-                }
-                for (size_t i = 0; i < copy_len; i++) {
-                    component_storage[component_count][i] = component_start[i];
-                }
-                component_storage[component_count][copy_len] = '\0';
-                component_count++;
+            if (component_count >= MAX_PATH_COMPONENTS || component_length >= MAX_PATH_COMPONENT_LEN) {
+                set_errno(THUNDEROS_ERANGE);
+                return -1;
             }
+
+            for (size_t i = 0; i < component_length; i++) {
+                component_storage[component_count][i] = component_start[i];
+            }
+            component_storage[component_count][component_length] = '\0';
+            component_count++;
         }
         
         if (*cursor == '/') {
@@ -137,22 +153,55 @@ static int normalize_resolve_components(const char *working, char *normalized, s
     
     /* Build the normalized path from components */
     size_t output_pos = 0;
+    if (size < 2) {
+        set_errno(THUNDEROS_ERANGE);
+        return -1;
+    }
     normalized[output_pos++] = '/';
     
     for (int component_index = 0; component_index < component_count; component_index++) {
         const char *component = component_storage[component_index];
-        while (*component && output_pos < size - 1) {
+        while (*component) {
+            if (output_pos >= size - 1) {
+                set_errno(THUNDEROS_ERANGE);
+                return -1;
+            }
             normalized[output_pos++] = *component++;
         }
         
         /* Add separator between components (not after last) */
-        if (component_index < component_count - 1 && output_pos < size - 1) {
+        if (component_index < component_count - 1) {
+            if (output_pos >= size - 1) {
+                set_errno(THUNDEROS_ERANGE);
+                return -1;
+            }
             normalized[output_pos++] = '/';
         }
     }
     normalized[output_pos] = '\0';
     
+    clear_errno();
     return 0;
+}
+
+static int vfs_is_persistent_node(vfs_node_t *node) {
+    return node && g_root_fs && node == g_root_fs->root;
+}
+
+void vfs_release_node(vfs_node_t *node) {
+    if (!node || vfs_is_persistent_node(node)) {
+        return;
+    }
+
+    if (node->ops && node->ops->close) {
+        node->ops->close(node);
+    }
+
+    if (node->fs_data) {
+        kfree(node->fs_data);
+    }
+
+    kfree(node);
 }
 
 /* ========================================================================
@@ -188,6 +237,7 @@ int vfs_normalize_path(const char *path, char *normalized, size_t size) {
         return -1;
     }
     
+    clear_errno();
     return 0;
 }
 
@@ -245,6 +295,7 @@ int vfs_alloc_fd(void) {
             g_file_table[i].flags = 0;
             g_file_table[i].pipe = NULL;
             g_file_table[i].type = VFS_TYPE_FILE;
+            clear_errno();
             return i;
         }
     }
@@ -290,6 +341,7 @@ int vfs_dup2(int oldfd, int newfd) {
     
     /* If oldfd == newfd, just return newfd */
     if (oldfd == newfd) {
+        clear_errno();
         return newfd;
     }
     
@@ -311,6 +363,7 @@ int vfs_dup2(int oldfd, int newfd) {
     
     /* Note: Pipe reference counting is handled by vfs_close */
     
+    clear_errno();
     return newfd;
 }
 
@@ -387,13 +440,23 @@ vfs_node_t *vfs_resolve_path(const char *path) {
         /* Lookup component in current directory */
         if (!current_node->ops || !current_node->ops->lookup) {
             set_errno(THUNDEROS_EIO);
+            if (!vfs_is_persistent_node(current_node)) {
+                vfs_release_node(current_node);
+            }
             return NULL;
         }
         
         vfs_node_t *next_node = current_node->ops->lookup(current_node, component_name);
         if (!next_node) {
             /* errno already set by lookup */
+            if (!vfs_is_persistent_node(current_node)) {
+                vfs_release_node(current_node);
+            }
             return NULL;
+        }
+
+        if (!vfs_is_persistent_node(current_node)) {
+            vfs_release_node(current_node);
         }
         
         current_node = next_node;
@@ -461,7 +524,10 @@ int vfs_open(const char *path, uint32_t flags) {
         hal_uart_puts("vfs: File not found: ");
         hal_uart_puts(path);
         hal_uart_puts("\n");
-        RETURN_ERRNO(THUNDEROS_ENOENT);
+        if (errno == 0) {
+            RETURN_ERRNO(THUNDEROS_ENOENT);
+        }
+        return -1;
     }
     
     /* Check permissions based on open flags */
@@ -475,7 +541,7 @@ int vfs_open(const char *path, uint32_t flags) {
     }
     
     if (vfs_check_permission(node, access_mode) != 0) {
-        kfree(node);
+        vfs_release_node(node);
         /* errno already set by vfs_check_permission */
         return -1;
     }
@@ -498,6 +564,7 @@ int vfs_open(const char *path, uint32_t flags) {
         int ret = node->ops->open(node, flags);
         if (ret != 0) {
             vfs_free_fd(fd);
+            vfs_release_node(node);
             /* errno already set by open */
             return -1;
         }
@@ -545,8 +612,8 @@ int vfs_close(int fd) {
     }
     
     /* Call filesystem close if available */
-    if (file->node && file->node->ops && file->node->ops->close) {
-        file->node->ops->close(file->node);
+    if (file->node) {
+        vfs_release_node(file->node);
     }
     
     /* Free the file descriptor */
@@ -762,7 +829,10 @@ int vfs_rmdir(const char *path) {
         *last_slash = '/';   /* Restore */
         
         if (!parent_dir) {
-            RETURN_ERRNO(THUNDEROS_ENOENT);
+            if (errno == 0) {
+                RETURN_ERRNO(THUNDEROS_ENOENT);
+            }
+            return -1;
         }
         dirname = last_slash + 1;
     }
@@ -774,11 +844,18 @@ int vfs_rmdir(const char *path) {
     
     /* Check write permission on parent directory */
     if (vfs_check_permission(parent_dir, VFS_ACCESS_WRITE) != 0) {
+        if (!vfs_is_persistent_node(parent_dir)) {
+            vfs_release_node(parent_dir);
+        }
         /* errno already set by vfs_check_permission */
         return -1;
     }
-    
-    return parent_dir->ops->rmdir(parent_dir, dirname);
+
+    int result = parent_dir->ops->rmdir(parent_dir, dirname);
+    if (!vfs_is_persistent_node(parent_dir)) {
+        vfs_release_node(parent_dir);
+    }
+    return result;
 }
 
 /**
@@ -821,7 +898,10 @@ int vfs_unlink(const char *path) {
         *last_slash = '/';   /* Restore */
         
         if (!parent_dir) {
-            RETURN_ERRNO(THUNDEROS_ENOENT);
+            if (errno == 0) {
+                RETURN_ERRNO(THUNDEROS_ENOENT);
+            }
+            return -1;
         }
         filename = last_slash + 1;
     }
@@ -833,11 +913,18 @@ int vfs_unlink(const char *path) {
     
     /* Check write permission on parent directory */
     if (vfs_check_permission(parent_dir, VFS_ACCESS_WRITE) != 0) {
+        if (!vfs_is_persistent_node(parent_dir)) {
+            vfs_release_node(parent_dir);
+        }
         /* errno already set by vfs_check_permission */
         return -1;
     }
-    
-    return parent_dir->ops->unlink(parent_dir, filename);
+
+    int result = parent_dir->ops->unlink(parent_dir, filename);
+    if (!vfs_is_persistent_node(parent_dir)) {
+        vfs_release_node(parent_dir);
+    }
+    return result;
 }
 
 /**
@@ -857,6 +944,7 @@ int vfs_stat(const char *path, uint32_t *size, uint32_t *type) {
         *type = node->type;
     }
     
+    vfs_release_node(node);
     clear_errno();
     return 0;
 }
@@ -886,6 +974,7 @@ int vfs_stat_full(const char *path, vfs_stat_t *statbuf) {
     statbuf->st_size = node->size;
     statbuf->st_type = node->type;
     
+    vfs_release_node(node);
     clear_errno();
     return 0;
 }
@@ -895,7 +984,11 @@ int vfs_stat_full(const char *path, vfs_stat_t *statbuf) {
  */
 int vfs_exists(const char *path) {
     vfs_node_t *node = vfs_resolve_path(path);
-    return node != NULL;
+    int exists = (node != NULL);
+    if (node) {
+        vfs_release_node(node);
+    }
+    return exists;
 }
 
 /* ========================================================================
@@ -985,7 +1078,7 @@ int vfs_chmod(const char *path, uint32_t new_mode) {
     
     /* Only root or file owner can change permissions */
     if (proc && proc->euid != 0 && proc->euid != node->uid) {
-        kfree(node);
+        vfs_release_node(node);
         RETURN_ERRNO(THUNDEROS_EACCES);
     }
     
@@ -1003,7 +1096,7 @@ int vfs_chmod(const char *path, uint32_t new_mode) {
         }
     }
     
-    kfree(node);
+    vfs_release_node(node);
     clear_errno();
     return 0;
 }
@@ -1031,7 +1124,7 @@ int vfs_chown(const char *path, uint16_t uid, uint16_t gid) {
     
     /* Only root can change ownership */
     if (proc && proc->euid != 0) {
-        kfree(node);
+        vfs_release_node(node);
         RETURN_ERRNO(THUNDEROS_EACCES);
     }
     
@@ -1051,7 +1144,7 @@ int vfs_chown(const char *path, uint16_t uid, uint16_t gid) {
         }
     }
     
-    kfree(node);
+    vfs_release_node(node);
     clear_errno();
     return 0;
 }

@@ -157,6 +157,7 @@ int vfs_unlink(const char *path);
 
 /* Path resolution */
 vfs_node_t *vfs_resolve_path(const char *path);
+void vfs_release_node(vfs_node_t *node);
 
 /* Path normalization - converts relative paths to absolute, resolves . and .. */
 int vfs_normalize_path(const char *path, char *normalized, size_t size);

@@ -113,6 +113,7 @@ static void shell_ls(int argument_count, char **argument_vector) {
         hal_uart_puts("ls: '");
         hal_uart_puts(directory_path);
         hal_uart_puts("': Not a directory\n");
+        vfs_release_node(directory_node);
         return;
     }
     
@@ -126,6 +127,8 @@ static void shell_ls(int argument_count, char **argument_vector) {
         hal_uart_puts("\n");
         entry_index++;
     }
+
+    vfs_release_node(directory_node);
 }
 
 /**

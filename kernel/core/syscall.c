@@ -1164,6 +1164,7 @@ uint64_t sys_chdir(const char *path) {
     }
     
     if (node->type != VFS_TYPE_DIRECTORY) {
+        vfs_release_node(node);
         set_errno(THUNDEROS_ENOTDIR);
         return SYSCALL_ERROR;
     }
@@ -1175,6 +1176,8 @@ uint64_t sys_chdir(const char *path) {
         path_index++;
     }
     proc->cwd[path_index] = '\0';
+
+    vfs_release_node(node);
     
     clear_errno();
     return SYSCALL_SUCCESS;
