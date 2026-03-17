@@ -102,7 +102,7 @@ struct thunderos_dirent {
 static const char *SHELL_BANNER =
     "\n"
     "===========================================\n"
-    "  ThunderOS User Shell v0.7.0\n"
+    "  ThunderOS User Shell v0.9.0\n"
     "===========================================\n"
     "\n"
     "Type 'help' for available commands\n"
