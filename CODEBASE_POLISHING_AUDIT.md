@@ -127,9 +127,14 @@ No confirmed blockers recorded yet.
 - Problem: after the first syscall errno pass, some wrappers still had inconsistent boundary behavior. `getdents()` and `getcwd()` treated invalid user buffers as `THUNDEROS_EINVAL` instead of `THUNDEROS_EFAULT`, `chdir()` and `execve()` bypassed the shared path validator, `execve()` could return a bare error for bad argument pointers, and simple getter syscalls like `getuid()` and `gettty()` could return success with stale errno still set.
 - Why it matters: these inconsistencies keep the user/kernel contract unpredictable. Callers can still receive the wrong class of error for bad user memory, and successful metadata queries can inherit unrelated earlier failures.
 - Recommended fix: normalize the remaining invalid-pointer sites to `THUNDEROS_EFAULT`, route path-taking wrappers through the shared validator, reject oversized `execve()` argument vectors deterministically, and clear errno on simple success-only getters.
-- Test gap: there is still no dedicated syscall regression suite in the tracked kernel tests for bad-fd, tty, and `waitpid` negative paths.
-- Verification note: updated `getdents()`, `getcwd()`, `chdir()`, `execve()`, and the simple identity and terminal getters so their errno behavior matches the rest of the audited syscall boundary.
+- Test gap: tracked kernel coverage now exists for the invalid-pointer and stale-errno cases fixed here, but there is still no dedicated syscall regression coverage for bad-fd, tty-range, and `waitpid` negative paths.
+- Verification note: updated `getdents()`, `getcwd()`, `chdir()`, `execve()`, and the simple identity and terminal getters so their errno behavior matches the rest of the audited syscall boundary, and added a kernel regression test file for the audited pointer-validation and success-path errno clearing cases.
 - Status: fixed
+
+### Regression Coverage
+
+- Added tracked kernel regression coverage for syscall errno behavior in `tests/unit/test_syscall_errno.c`.
+- Current coverage includes invalid-user-pointer failures for `getcwd()`, `getdents()`, `chdir()`, and `execve()`, plus stale-errno clearing on successful `getuid()`, `gettty()`, and `settty()` calls.
 
 ### Minor
 
