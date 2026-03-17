@@ -847,13 +847,24 @@ uint64_t sys_munmap(void *addr, size_t length) {
         return SYSCALL_ERROR;  // Address not start of mapping
     }
     
-    // Unmap all pages in the region
+    // Unmap all pages in the region and release their physical backing
     for (uint64_t page = start; page < end; page += PAGE_SIZE) {
-        unmap_page(proc->page_table, page);
+        uintptr_t phys_page;
+        if (virt_to_phys(proc->page_table, page, &phys_page) != 0) {
+            return SYSCALL_ERROR;
+        }
+
+        if (unmap_page(proc->page_table, page) != 0) {
+            return SYSCALL_ERROR;
+        }
+
+        pmm_free_page(phys_page);
     }
     
     // Remove VMA
     process_remove_vma(proc, vma);
+
+    clear_errno();
     
     return SYSCALL_SUCCESS;
 }

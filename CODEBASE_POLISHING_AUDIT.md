@@ -29,6 +29,7 @@ Current audit status: initial inventory complete, full subsystem review not yet 
 | S4 | Serious | Confirmed | tests/scripts/test_kernel.sh; tests/scripts/test_integration.sh | Standalone scripted QEMU tests built `TEST_MODE=1` kernels without `ENABLE_TESTS=1`, so the built-in test markers they asserted could never appear | Fixed by aligning the standalone scripts with the same build mode used by `make test` |
 | S5 | Serious | Confirmed | kernel/fs/ext2_vfs.c; kernel/fs/vfs.c | Lookup wrappers overwrote specific ext2/VFS failures with generic `ENOENT`, hiding real causes like invalid directories, allocation failures, or mount-state errors | Fixed by preserving upstream `errno` and only defaulting to `ENOENT` when no specific error is set |
 | S6 | Serious | Confirmed | kernel/mm/paging.c | User page-table and mapping failure paths leaked paging structures or left dangling mappings to freed pages | Fixed by freeing page tables with `free_page_table()` and cleaning up partially mapped user pages on failure |
+| S7 | Serious | Confirmed | kernel/core/process.c; kernel/core/syscall.c | User-memory teardown leaked physical pages on process cleanup and `munmap`, and kernel-mode process stacks were not fully released | Fixed by freeing VMA-backed physical pages during cleanup and unmapping, and by freeing kmalloc-backed kernel-process user stacks |
 
 ## Detailed Findings
 
@@ -96,6 +97,16 @@ No confirmed blockers recorded yet.
 - Recommended fix: use `free_page_table()` for user page-table construction failures, and on user mapping failures, unmap any pages that were already inserted before freeing their physical memory.
 - Test gap: there is no failure-injection coverage for partial user mapping cleanup or user page-table construction rollback.
 - Verification note: replaced incorrect `kfree(user_pt)` calls with `free_page_table(user_pt)` and added rollback cleanup for partially mapped user pages in both mapping helpers.
+- Status: fixed
+
+#### S7
+- Location: `kernel/core/process.c`, `kernel/core/syscall.c`
+- Confidence: confirmed
+- Problem: process teardown only freed VMA structures and page tables, not the physical pages mapped for user code, heap, stack, or `mmap` regions. `sys_munmap()` similarly removed mappings without releasing physical backing pages. Separately, kernel-mode processes allocate `user_stack` with `kmalloc()`, but `process_free()` did not release that allocation.
+- Why it matters: exiting user processes and explicit unmaps leaked physical memory, and long-running systems would eventually exhaust pages. The kernel-process stack case also leaks heap memory for every kernel-mode process that exits.
+- Recommended fix: release VMA-backed physical pages before freeing page tables or VMAs, free physical pages during `munmap`, and explicitly free kmalloc-backed user stacks for kernel-mode processes.
+- Test gap: there is no stress coverage for repeated `mmap`/`munmap`, repeated user-process create/exit cycles, or kernel-process lifetime cleanup.
+- Verification note: added VMA page-release cleanup in process teardown and region rollback paths, updated `sys_munmap()` to free physical pages, and freed kmalloc-backed kernel-process user stacks during process cleanup.
 - Status: fixed
 
 ### Minor

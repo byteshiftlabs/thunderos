@@ -42,6 +42,7 @@ static inline void lock_release(volatile int *lock) {
 
 // Forward declarations
 static void forked_child_entry(void);
+static void process_release_vma_pages(struct process *proc, vm_area_t *vma);
 
 /**
  * Initialize the process management subsystem
@@ -165,12 +166,11 @@ void process_free(struct process *proc) {
         kfree((void *)proc->kernel_stack);
     }
     
-    // NOTE: Do NOT kfree user_stack! It's a USER SPACE virtual address,
-    // not a kernel allocation. The user stack pages are freed when we
-    // free the page table (which unmaps and frees all user pages).
-    // if (proc->user_stack) {
-    //     kfree((void *)proc->user_stack);  // WRONG!
-    // }
+    // Kernel-mode processes allocate their user stack with kmalloc and share
+    // the kernel page table, so free that stack explicitly.
+    if (proc->page_table == get_kernel_page_table() && proc->user_stack) {
+        kfree((void *)proc->user_stack);
+    }
     
     if (proc->trap_frame) {
         kfree(proc->trap_frame);
@@ -1336,11 +1336,34 @@ void process_cleanup_vmas(struct process *proc) {
     vm_area_t *vma = proc->vm_areas;
     while (vma) {
         vm_area_t *next = vma->next;
+        process_release_vma_pages(proc, vma);
         kfree(vma);
         vma = next;
     }
     
     proc->vm_areas = NULL;
+}
+
+static void process_release_vma_pages(struct process *proc, vm_area_t *vma) {
+    if (!proc || !vma || !proc->page_table || proc->page_table == get_kernel_page_table()) {
+        return;
+    }
+
+    uint64_t start = vma->start & ~(PAGE_SIZE - 1);
+    uint64_t end = (vma->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+
+    for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
+        uintptr_t phys_page;
+        if (virt_to_phys(proc->page_table, addr, &phys_page) != 0) {
+            clear_errno();
+            continue;
+        }
+
+        if (unmap_page(proc->page_table, addr) == 0) {
+            pmm_free_page(phys_page);
+        }
+        clear_errno();
+    }
 }
 
 /**
@@ -1372,10 +1395,17 @@ int process_map_region(struct process *proc, uint64_t vaddr, uint64_t size, uint
     if (flags & VM_USER) pte_flags |= PTE_U;
     
     // Allocate and map each page
+    uint64_t mapped_end = start;
     for (uint64_t addr = start; addr < end; addr += PAGE_SIZE) {
         uintptr_t phys_page = pmm_alloc_page();
         if (!phys_page) {
-            // TODO: Cleanup already mapped pages
+            vm_area_t partial_vma = {
+                .start = start,
+                .end = mapped_end,
+                .flags = flags,
+                .next = NULL,
+            };
+            process_release_vma_pages(proc, &partial_vma);
             RETURN_ERRNO(THUNDEROS_ENOMEM);
         }
         
@@ -1385,15 +1415,29 @@ int process_map_region(struct process *proc, uint64_t vaddr, uint64_t size, uint
         // Map the page
         if (map_page(proc->page_table, addr, phys_page, pte_flags) != 0) {
             pmm_free_page(phys_page);
-            // TODO: Cleanup already mapped pages
+            vm_area_t partial_vma = {
+                .start = start,
+                .end = mapped_end,
+                .flags = flags,
+                .next = NULL,
+            };
+            process_release_vma_pages(proc, &partial_vma);
             /* errno already set by map_page */
             return -1;
         }
+
+        mapped_end = addr + PAGE_SIZE;
     }
     
     // Add VMA to track this region
     if (process_add_vma(proc, start, end, flags) != 0) {
-        // TODO: Cleanup mapped pages
+        vm_area_t partial_vma = {
+            .start = start,
+            .end = end,
+            .flags = flags,
+            .next = NULL,
+        };
+        process_release_vma_pages(proc, &partial_vma);
         /* errno already set by process_add_vma */
         return -1;
     }
