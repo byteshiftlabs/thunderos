@@ -12,7 +12,7 @@ export TERM="${TERM:-dumb}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${SCRIPT_DIR}/../.."
 
-source "${SCRIPT_DIR}/test_helpers.sh"
+source "${SCRIPT_DIR}/structured_test_helpers.sh"
 
 # ── Header ───────────────────────────────────────────────────────────────────
 
@@ -91,7 +91,9 @@ printf "[ SETUP    ] Building userland..."
 if make userland >/dev/null 2>&1; then
     printf " OK\n"
 else
-    printf " skipped\n"
+    printf " FAILED\n"
+    printf "[${_R}  ERROR   ${_N}] Userland build failed. Ensure the submodule is initialized.\n" >&2
+    exit 1
 fi
 
 OUTPUT_DIR="${ROOT_DIR}/tests/outputs"

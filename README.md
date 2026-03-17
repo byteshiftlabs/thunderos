@@ -41,6 +41,15 @@ make qemu
 
 The OS will automatically build the filesystem image and start QEMU with VirtIO block device support.
 
+ThunderOS supports QEMU 10.1.2+ only. If your host QEMU is older, use Docker:
+
+```bash
+./run_os_docker.sh
+
+# or
+make qemu-docker
+```
+
 ### Automated Testing
 ```bash
 # Run all tests

@@ -44,6 +44,56 @@ static int gpu_transfer_to_host(uint32_t resource_id, uint32_t x, uint32_t y,
                                 uint32_t width, uint32_t height);
 static int gpu_resource_flush(uint32_t resource_id, uint32_t x, uint32_t y,
                               uint32_t width, uint32_t height);
+static int gpu_compute_pixel_count(uint32_t width, uint32_t height, size_t *pixel_count);
+static int gpu_compute_framebuffer_size(uint32_t width, uint32_t height, size_t *fb_size);
+static int gpu_compute_pixel_index(uint32_t width, uint32_t x, uint32_t y, size_t *index);
+
+static int gpu_compute_pixel_count(uint32_t width, uint32_t height, size_t *pixel_count)
+{
+    if (!pixel_count || width == 0 || height == 0) {
+        RETURN_ERRNO(THUNDEROS_EINVAL);
+    }
+
+    if ((size_t)width > ((size_t)-1) / height) {
+        RETURN_ERRNO(THUNDEROS_ERANGE);
+    }
+
+    *pixel_count = (size_t)width * height;
+    clear_errno();
+    return 0;
+}
+
+static int gpu_compute_framebuffer_size(uint32_t width, uint32_t height, size_t *fb_size)
+{
+    size_t pixel_count;
+
+    if (!fb_size || gpu_compute_pixel_count(width, height, &pixel_count) != 0) {
+        return -1;
+    }
+
+    if (pixel_count > ((size_t)-1) / sizeof(uint32_t)) {
+        RETURN_ERRNO(THUNDEROS_ERANGE);
+    }
+
+    *fb_size = pixel_count * sizeof(uint32_t);
+    clear_errno();
+    return 0;
+}
+
+static int gpu_compute_pixel_index(uint32_t width, uint32_t x, uint32_t y, size_t *index)
+{
+    if (!index || width == 0) {
+        RETURN_ERRNO(THUNDEROS_EINVAL);
+    }
+
+    if ((size_t)y > (((size_t)-1) - x) / width) {
+        RETURN_ERRNO(THUNDEROS_ERANGE);
+    }
+
+    *index = (size_t)y * width + x;
+    clear_errno();
+    return 0;
+}
 
 /**
  * Initialize a virtqueue for GPU
@@ -512,7 +562,17 @@ int virtio_gpu_init(uintptr_t base_addr, uint32_t irq)
     }
     
     g_gpu_device->fb_format = VIRTIO_GPU_FORMAT_B8G8R8X8_UNORM;
-    g_gpu_device->fb_size = (size_t)g_gpu_device->fb_width * g_gpu_device->fb_height * 4;
+    if (gpu_compute_framebuffer_size(g_gpu_device->fb_width, g_gpu_device->fb_height,
+                                     &g_gpu_device->fb_size) != 0) {
+        dma_free(g_cmd_region);
+        dma_free(g_resp_region);
+        g_cmd_region = NULL;
+        g_resp_region = NULL;
+        GPU_WRITE32(g_gpu_device, VIRTIO_MMIO_STATUS, VIRTIO_STATUS_FAILED);
+        kfree(g_gpu_device);
+        g_gpu_device = NULL;
+        return -1;
+    }
     
     /* Allocate framebuffer */
     dma_region_t *fb_region = dma_alloc(g_gpu_device->fb_size, DMA_ZERO);
@@ -621,8 +681,11 @@ int virtio_gpu_get_display_info(uint32_t *width, uint32_t *height)
  */
 void virtio_gpu_set_pixel(uint32_t x, uint32_t y, uint32_t color)
 {
+    size_t index;
+
     if (!g_gpu_device || !g_gpu_device->fb_pixels) return;
     if (x >= g_gpu_device->fb_width || y >= g_gpu_device->fb_height) return;
+    if (gpu_compute_pixel_index(g_gpu_device->fb_width, x, y, &index) != 0) return;
     
     /* Convert ARGB to BGRX for the GPU format */
     uint8_t r = (color >> 16) & 0xFF;
@@ -630,7 +693,7 @@ void virtio_gpu_set_pixel(uint32_t x, uint32_t y, uint32_t color)
     uint8_t b = color & 0xFF;
     uint32_t bgrx = (r << 16) | (g << 8) | b;
     
-    g_gpu_device->fb_pixels[y * g_gpu_device->fb_width + x] = bgrx;
+    g_gpu_device->fb_pixels[index] = bgrx;
 }
 
 /**
@@ -638,10 +701,13 @@ void virtio_gpu_set_pixel(uint32_t x, uint32_t y, uint32_t color)
  */
 uint32_t virtio_gpu_get_pixel(uint32_t x, uint32_t y)
 {
+    size_t index;
+
     if (!g_gpu_device || !g_gpu_device->fb_pixels) return 0;
     if (x >= g_gpu_device->fb_width || y >= g_gpu_device->fb_height) return 0;
+    if (gpu_compute_pixel_index(g_gpu_device->fb_width, x, y, &index) != 0) return 0;
     
-    uint32_t bgrx = g_gpu_device->fb_pixels[y * g_gpu_device->fb_width + x];
+    uint32_t bgrx = g_gpu_device->fb_pixels[index];
     /* Convert BGRX back to ARGB */
     uint8_t r = (bgrx >> 16) & 0xFF;
     uint8_t g = (bgrx >> 8) & 0xFF;
@@ -654,6 +720,8 @@ uint32_t virtio_gpu_get_pixel(uint32_t x, uint32_t y)
  */
 void virtio_gpu_clear(uint32_t color)
 {
+    size_t num_pixels;
+
     if (!g_gpu_device || !g_gpu_device->fb_pixels) return;
     
     /* Convert ARGB to BGRX */
@@ -662,8 +730,12 @@ void virtio_gpu_clear(uint32_t color)
     uint8_t b = color & 0xFF;
     uint32_t bgrx = (r << 16) | (g << 8) | b;
     
-    uint32_t num_pixels = g_gpu_device->fb_width * g_gpu_device->fb_height;
-    for (uint32_t i = 0; i < num_pixels; i++) {
+    if (gpu_compute_pixel_count(g_gpu_device->fb_width, g_gpu_device->fb_height,
+                                &num_pixels) != 0) {
+        return;
+    }
+
+    for (size_t i = 0; i < num_pixels; i++) {
         g_gpu_device->fb_pixels[i] = bgrx;
     }
 }
@@ -708,10 +780,10 @@ int virtio_gpu_flush_region(uint32_t x, uint32_t y, uint32_t width, uint32_t hei
         clear_errno();
         return 0;
     }
-    if (x + width > g_gpu_device->fb_width) {
+    if (width > g_gpu_device->fb_width - x) {
         width = g_gpu_device->fb_width - x;
     }
-    if (y + height > g_gpu_device->fb_height) {
+    if (height > g_gpu_device->fb_height - y) {
         height = g_gpu_device->fb_height - y;
     }
     

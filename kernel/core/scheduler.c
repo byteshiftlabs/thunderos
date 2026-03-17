@@ -235,11 +235,15 @@ void schedule(void) {
         // Switch to next process
         if (next != current) {
             context_switch(current, next);
-            // After context_switch returns, we're on the resumed process's stack.
-            // Local variable 'old_state' now points to the new process's stack frame
-            // which contains garbage or the wrong value.
-            // We must enable interrupts and return WITHOUT using old_state.
-            interrupt_restore(INTERRUPTS_ENABLED);  // Always enable interrupts after context switch
+            // IMPORTANT: After context_switch returns, we're on the *resumed*
+            // process's kernel stack, not the original caller's. The local
+            // variable 'old_state' is invalid here — it references the resumed
+            // process's stack frame, which holds whatever value that process
+            // had before it was switched out.
+            // We unconditionally enable interrupts because every process that
+            // was switched out had interrupts disabled (by schedule()), so
+            // they must be re-enabled on resumption. This is correct by design.
+            interrupt_restore(INTERRUPTS_ENABLED);
             return;
         }
     }

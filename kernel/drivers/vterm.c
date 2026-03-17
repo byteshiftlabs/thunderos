@@ -824,7 +824,7 @@ static void vterm_putc_internal(vterm_t *term, int index, char c)
         /* Move to next line */
         term->cursor_row++;
         term->cursor_col = 0;
-        if (term->cursor_row >= term->rows) {
+        if (term->rows > 0 && term->cursor_row >= term->rows) {
             /* Scroll up */
             for (uint32_t row = 0; row < term->rows - 1; row++) {
                 for (uint32_t col = 0; col < term->cols; col++) {
@@ -897,7 +897,7 @@ static void vterm_putc_internal(vterm_t *term, int index, char c)
     if (term->cursor_col >= term->cols) {
         term->cursor_row++;
         term->cursor_col = 0;
-        if (term->cursor_row >= term->rows) {
+        if (term->rows > 0 && term->cursor_row >= term->rows) {
             /* Scroll */
             for (uint32_t row = 0; row < term->rows - 1; row++) {
                 for (uint32_t col = 0; col < term->cols; col++) {

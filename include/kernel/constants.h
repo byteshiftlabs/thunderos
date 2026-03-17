@@ -150,6 +150,8 @@
 /* Timer/interrupt bit positions */
 #define STIE_BIT                        5
 #define SIE_STIE                        (1 << STIE_BIT)
+#define SEIE_BIT                        9
+#define SIE_SEIE                        (1 << SEIE_BIT)  /* Supervisor External Interrupt Enable */
 
 /* SSTATUS bits */
 #define SSTATUS_SPP_BIT                 8

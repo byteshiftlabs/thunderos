@@ -328,7 +328,9 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
                                    void *code_mem, size_t code_size, 
                                    uint64_t entry_point,
                                    const elf_segment_info_t *segments,
-                                   int num_segments);
+                                   int num_segments,
+                                   const char *argv[],
+                                   int argc);
 
 /**
  * Return to user mode (assembly function)
@@ -357,7 +359,7 @@ void *process_alloc_mem(struct process *proc, uint64_t vaddr, uint64_t size);
  * @param argv Array of argument strings
  * @param argc Argument count
  */
-void process_setup_args(struct process *proc, const char *argv[], int argc);
+int process_setup_args(struct process *proc, const char *argv[], int argc);
 
 /**
  * Mark process as ready to run

@@ -9,24 +9,11 @@
 
 #ifdef ENABLE_KERNEL_TESTS
 
-#include "hal/hal_uart.h"
 #include "kernel/errno.h"
 #include "kernel/kstring.h"
+#include "tests/structured_test_kernel.h"
 
-#define TEST_PASS(name) do { \
-    hal_uart_puts("  [PASS] " name "\n"); \
-    tests_passed++; \
-    tests_total++; \
-} while (0)
-
-#define TEST_FAIL(name, msg) do { \
-    hal_uart_puts("  [FAIL] " name ": " msg "\n"); \
-    tests_total++; \
-} while (0)
-
-#define ASSERT(name, cond, msg) do { \
-    if (cond) { TEST_PASS(name); } else { TEST_FAIL(name, msg); } \
-} while (0)
+#define ASSERT(suite, name, cond, msg) KTEST_ASSERT((suite), (name), (cond), (msg))
 
 /* Helper that uses RETURN_ERRNO macro */
 static int helper_return_errno(int code)
@@ -35,100 +22,82 @@ static int helper_return_errno(int code)
 }
 
 void test_errno(void) {
-    hal_uart_puts("\n");
-    hal_uart_puts("========================================\n");
-    hal_uart_puts("  errno Unit Tests\n");
-    hal_uart_puts("========================================\n\n");
+    ktest_suite_t suite;
+    ktest_suite_init(&suite, "Errno");
+    ktest_suite_begin(&suite);
 
-    int tests_passed = 0;
-    int tests_total = 0;
-
-    /* Test 1: clear_errno sets errno to OK */
     set_errno(THUNDEROS_EINVAL);
     clear_errno();
-    ASSERT("clear_errno sets errno to THUNDEROS_OK",
+    ASSERT(suite, "ClearErrnoSetsOk",
            get_errno() == THUNDEROS_OK,
            "errno was not cleared");
 
-    /* Test 2: set_errno stores the code */
     set_errno(THUNDEROS_ENOMEM);
-    ASSERT("set_errno stores error code",
+    ASSERT(suite, "SetErrnoStoresCode",
            get_errno() == THUNDEROS_ENOMEM,
            "get_errno did not return THUNDEROS_ENOMEM");
 
-    /* Test 3: set_errno returns -1 */
     clear_errno();
     int ret = set_errno(THUNDEROS_EINVAL);
-    ASSERT("set_errno returns -1",
+    ASSERT(suite, "SetErrnoReturnsMinusOne",
            ret == -1,
            "set_errno did not return -1");
 
-    /* Test 4: errno holds last value set */
     set_errno(THUNDEROS_ENOENT);
     set_errno(THUNDEROS_EBADF);
-    ASSERT("errno holds the last value set",
+    ASSERT(suite, "ErrnoTracksLastValueSet",
            get_errno() == THUNDEROS_EBADF,
            "errno was not updated to last set code");
 
-    /* Test 5: RETURN_ERRNO macro sets errno and returns -1 */
     clear_errno();
     int macro_ret = helper_return_errno(THUNDEROS_EPERM);
-    ASSERT("RETURN_ERRNO sets errno",
+    ASSERT(suite, "ReturnErrnoMacroSetsErrno",
            get_errno() == THUNDEROS_EPERM,
            "RETURN_ERRNO did not set errno");
-    ASSERT("RETURN_ERRNO returns -1",
+    ASSERT(suite, "ReturnErrnoMacroReturnsMinusOne",
            macro_ret == -1,
            "RETURN_ERRNO did not return -1");
 
-    /* Test 6: clear_errno after set restores OK */
     set_errno(THUNDEROS_EIO);
     clear_errno();
-    ASSERT("clear_errno restores THUNDEROS_OK after set",
+    ASSERT(suite, "ClearErrnoRestoresOkAfterSet",
            get_errno() == THUNDEROS_OK,
            "clear_errno did not restore OK");
 
-    /* Test 7: thunderos_strerror returns non-NULL for known codes */
     const char *s = thunderos_strerror(THUNDEROS_ENOMEM);
-    ASSERT("thunderos_strerror returns non-NULL",
+    ASSERT(suite, "StrerrorReturnsNonNullForKnownCode",
            s != NULL,
            "thunderos_strerror returned NULL");
 
-    /* Test 8: thunderos_strerror for THUNDEROS_OK returns "Success" */
     const char *ok_str = thunderos_strerror(THUNDEROS_OK);
-    ASSERT("thunderos_strerror(OK) returns \"Success\"",
+    ASSERT(suite, "StrerrorOkReturnsSuccess",
            ok_str != NULL && kstrcmp(ok_str, "Success") == 0,
            "thunderos_strerror(OK) did not return \"Success\"");
 
-    /* Test 9: thunderos_strerror for EINVAL returns non-empty string */
     const char *einval_str = thunderos_strerror(THUNDEROS_EINVAL);
-    ASSERT("thunderos_strerror(EINVAL) returns non-empty string",
+    ASSERT(suite, "StrerrorEinvalReturnsNonEmptyString",
            einval_str != NULL && einval_str[0] != '\0',
            "thunderos_strerror(EINVAL) returned empty string");
 
-    /* Test 10: errno survives set/clear cycle without corruption */
+    int cycle_ok = 1;
     for (int i = 1; i <= 10; i++) {
         set_errno(i);
         if (get_errno() != i) {
-            TEST_FAIL("errno set/clear cycle (no corruption)", "mismatch on iteration");
-            goto done;
+            cycle_ok = 0;
+            break;
         }
         clear_errno();
         if (get_errno() != THUNDEROS_OK) {
-            TEST_FAIL("errno set/clear cycle (no corruption)", "clear failed on iteration");
-            goto done;
+            cycle_ok = 0;
+            break;
         }
     }
-    TEST_PASS("errno set/clear cycle (no corruption)");
+    ASSERT(suite, "ErrnoSetClearCycleIsStable", cycle_ok,
+           "errno set/clear cycle became inconsistent");
 
-done:
     clear_errno();
 
-    hal_uart_puts("\n");
-    hal_uart_puts("errno tests: ");
-    kprint_dec(tests_passed);
-    hal_uart_puts("/");
-    kprint_dec(tests_total);
-    hal_uart_puts(" passed\n\n");
+    ktest_suite_end(&suite);
 }
 
 #endif /* ENABLE_KERNEL_TESTS */

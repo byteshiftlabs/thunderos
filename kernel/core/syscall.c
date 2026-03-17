@@ -139,6 +139,10 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
             
             // Store stop status if requested (signal << 8 | 0x7f)
             if (wstatus) {
+                if (!is_valid_user_pointer(wstatus, sizeof(int))) {
+                    set_errno(THUNDEROS_EFAULT);
+                    return SYSCALL_ERROR;
+                }
                 *wstatus = child->exit_code;  // Already set by signal_default_stop
             }
             

@@ -128,4 +128,16 @@ uint32_t wait_queue_count(wait_queue_t *wq);
  */
 int wait_queue_remove(wait_queue_t *wq, struct process *proc);
 
+#ifdef ENABLE_KERNEL_TESTS
+/**
+ * Force the next wait_queue_sleep allocation to fail.
+ *
+ * Test-only hook used to verify failure-path behavior without relying on
+ * global allocator exhaustion.
+ *
+ * @param enabled Non-zero to fail the next internal allocation, zero to disable.
+ */
+void wait_queue_test_force_alloc_failure(int enabled);
+#endif
+
 #endif /* WAIT_QUEUE_H */

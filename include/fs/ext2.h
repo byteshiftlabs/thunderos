@@ -317,4 +317,14 @@ struct vfs_filesystem;
  */
 struct vfs_filesystem *ext2_vfs_mount(ext2_fs_t *ext2_fs);
 
+#ifdef ENABLE_KERNEL_TESTS
+/**
+ * Force the next ext2 VFS write to request a shorter lower-level write.
+ *
+ * Test-only hook used to verify that ext2_vfs_write rejects partial writes.
+ * Pass -1 to disable the hook.
+ */
+void ext2_vfs_test_force_write_size(int forced_size);
+#endif
+
 #endif /* EXT2_H */

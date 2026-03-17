@@ -89,6 +89,13 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
         RETURN_ERRNO(THUNDEROS_EFS_BADSUPER);
     }
     
+    /* Validate s_log_block_size before shifting to prevent undefined behavior */
+    if (fs->superblock->s_log_block_size > 10) {
+        kfree(fs->superblock);
+        fs->superblock = NULL;
+        RETURN_ERRNO(THUNDEROS_EFS_INVAL);
+    }
+
     /* Calculate block size */
     fs->block_size = EXT2_MIN_BLOCK_SIZE << fs->superblock->s_log_block_size;
     

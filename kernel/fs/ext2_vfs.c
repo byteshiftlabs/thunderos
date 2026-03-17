@@ -9,6 +9,14 @@
 #include "../../include/kernel/errno.h"
 #include <stddef.h>
 
+#ifdef ENABLE_KERNEL_TESTS
+static int g_ext2_vfs_forced_write_size = -1;
+
+void ext2_vfs_test_force_write_size(int forced_size) {
+    g_ext2_vfs_forced_write_size = forced_size;
+}
+#endif
+
 /* Forward declarations for ext2 VFS operations */
 static int ext2_vfs_read(vfs_node_t *node, uint32_t offset, void *buffer, uint32_t size);
 static int ext2_vfs_write(vfs_node_t *node, uint32_t offset, const void *buffer, uint32_t size);
@@ -72,7 +80,15 @@ static int ext2_vfs_write(vfs_node_t *node, uint32_t offset, const void *buffer,
     ext2_fs_t *ext2_fs = (ext2_fs_t *)node->fs->fs_data;
     ext2_inode_t *inode = (ext2_inode_t *)node->fs_data;
     
-    int bytes_written = ext2_write_file(ext2_fs, inode, offset, buffer, size);
+    uint32_t write_size = size;
+#ifdef ENABLE_KERNEL_TESTS
+    if (g_ext2_vfs_forced_write_size >= 0 && (uint32_t)g_ext2_vfs_forced_write_size < size) {
+        write_size = (uint32_t)g_ext2_vfs_forced_write_size;
+        g_ext2_vfs_forced_write_size = -1;
+    }
+#endif
+
+    int bytes_written = ext2_write_file(ext2_fs, inode, offset, buffer, write_size);
     if (bytes_written < 0) {
         /* errno already set by ext2_write_file */
         return -1;
@@ -86,6 +102,11 @@ static int ext2_vfs_write(vfs_node_t *node, uint32_t offset, const void *buffer,
     
     /* Update VFS node size */
     node->size = inode->i_size;
+
+    if ((uint32_t)bytes_written != size) {
+        set_errno(THUNDEROS_EIO);
+        return -1;
+    }
     
     clear_errno();
     return bytes_written;

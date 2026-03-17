@@ -16,31 +16,25 @@
 #include "mm/pmm.h"
 #include "mm/kmalloc.h"
 #include "kernel/kstring.h"
-#include "hal/hal_uart.h"
+#include "tests/structured_test_kernel.h"
 
-// Simple test framework
-static int tests_passed = 0;
-static int tests_failed = 0;
+static ktest_suite_t *g_suite = NULL;
+static const char *g_current_test = NULL;
 
 #define TEST_START(name) \
     do { \
-        hal_uart_puts("Test: "); \
-        hal_uart_puts(name); \
-        hal_uart_puts("... "); \
+        g_current_test = (name); \
+        ktest_case_begin(g_suite, g_current_test); \
     } while(0)
 
 #define TEST_PASS() \
     do { \
-        hal_uart_puts("PASS\n"); \
-        tests_passed++; \
+        ktest_case_pass(g_suite, g_current_test); \
     } while(0)
 
 #define TEST_FAIL(msg) \
     do { \
-        hal_uart_puts("FAIL - "); \
-        hal_uart_puts(msg); \
-        hal_uart_puts("\n"); \
-        tests_failed++; \
+        ktest_case_fail(g_suite, g_current_test, (msg)); \
         return; \
     } while(0)
 
@@ -98,7 +92,7 @@ static void cleanup_test_process(struct process *proc) {
  * Test 1: Process has isolated page table
  */
 static void test_isolated_page_table(void) {
-    TEST_START("Process has isolated page table");
+    TEST_START("ProcessHasIsolatedPageTable");
     
     struct process *proc = create_test_process_struct("test_proc1");
     ASSERT(proc != NULL, "Process creation failed");
@@ -118,7 +112,7 @@ static void test_isolated_page_table(void) {
  * Test 2: VMA list is initialized
  */
 static void test_vma_initialization(void) {
-    TEST_START("VMA list is initialized");
+    TEST_START("VmaListIsInitialized");
     
     struct process *proc = create_test_process_struct("test_proc2");
     ASSERT(proc != NULL, "Process creation failed");
@@ -149,7 +143,7 @@ static void test_vma_initialization(void) {
  * Test 3: VMA permissions tracking works
  */
 static void test_code_vma_permissions(void) {
-    TEST_START("VMA permissions tracking works");
+    TEST_START("CodeVmaPermissionsTracked");
     
     struct process *proc = create_test_process_struct("test_proc3");
     ASSERT(proc != NULL, "Process creation failed");
@@ -178,7 +172,7 @@ static void test_code_vma_permissions(void) {
  * Test 4: Multiple VMAs can coexist
  */
 static void test_stack_vma_permissions(void) {
-    TEST_START("Multiple VMAs can coexist");
+    TEST_START("MultipleVmasCanCoexist");
     
     struct process *proc = create_test_process_struct("test_proc4");
     ASSERT(proc != NULL, "Process creation failed");
@@ -218,7 +212,7 @@ static void test_stack_vma_permissions(void) {
  * Test 5: Heap boundaries are initialized
  */
 static void test_heap_initialization(void) {
-    TEST_START("Heap boundaries are initialized");
+    TEST_START("HeapBoundariesAreInitialized");
     
     struct process *proc = create_test_process_struct("test_proc5");
     ASSERT(proc != NULL, "Process creation failed");
@@ -237,7 +231,7 @@ static void test_heap_initialization(void) {
  * Test 6: process_map_region creates VMA
  */
 static void test_map_region_creates_vma(void) {
-    TEST_START("process_map_region creates VMA");
+    TEST_START("MapRegionCreatesVma");
     
     struct process *proc = create_test_process_struct("test_proc6");
     ASSERT(proc != NULL, "Process creation failed");
@@ -266,7 +260,7 @@ static void test_map_region_creates_vma(void) {
  * Test 7: process_validate_user_ptr validates permissions
  */
 static void test_validate_user_ptr_permissions(void) {
-    TEST_START("process_validate_user_ptr validates permissions");
+    TEST_START("ValidateUserPtrHonorsPermissions");
     
     struct process *proc = create_test_process_struct("test_proc7");
     ASSERT(proc != NULL, "Process creation failed");
@@ -294,7 +288,7 @@ static void test_validate_user_ptr_permissions(void) {
  * Test 8: process_validate_user_ptr rejects unmapped addresses
  */
 static void test_validate_user_ptr_rejects_unmapped(void) {
-    TEST_START("process_validate_user_ptr rejects unmapped addresses");
+    TEST_START("ValidateUserPtrRejectsUnmappedAddresses");
     
     struct process *proc = create_test_process_struct("test_proc8");
     ASSERT(proc != NULL, "Process creation failed");
@@ -315,7 +309,7 @@ static void test_validate_user_ptr_rejects_unmapped(void) {
  * Test 9: process_validate_user_ptr rejects kernel addresses
  */
 static void test_validate_user_ptr_rejects_kernel(void) {
-    TEST_START("process_validate_user_ptr rejects kernel addresses");
+    TEST_START("ValidateUserPtrRejectsKernelAddresses");
     
     struct process *proc = create_test_process_struct("test_proc9");
     ASSERT(proc != NULL, "Process creation failed");
@@ -336,7 +330,7 @@ static void test_validate_user_ptr_rejects_kernel(void) {
  * Test 10: VMA cleanup frees all VMAs
  */
 static void test_vma_cleanup(void) {
-    TEST_START("VMA cleanup frees all VMAs");
+    TEST_START("VmaCleanupFreesAllVmas");
     
     struct process *proc = create_test_process_struct("test_proc10");
     ASSERT(proc != NULL, "Process creation failed");
@@ -364,7 +358,7 @@ static void test_vma_cleanup(void) {
  * Test 11: Different processes have different structures
  */
 static void test_processes_have_different_page_tables(void) {
-    TEST_START("Different processes have different structures");
+    TEST_START("ProcessesHaveDistinctStructures");
     
     struct process *proc1 = create_test_process_struct("test_proc11a");
     struct process *proc2 = create_test_process_struct("test_proc11b");
@@ -386,7 +380,7 @@ static void test_processes_have_different_page_tables(void) {
  * Test 12: process_add_vma creates proper VMA
  */
 static void test_add_vma(void) {
-    TEST_START("process_add_vma creates proper VMA");
+    TEST_START("AddVmaCreatesExpectedRegion");
     
     struct process *proc = create_test_process_struct("test_proc12");
     ASSERT(proc != NULL, "Process creation failed");
@@ -415,7 +409,7 @@ static void test_add_vma(void) {
  * Test 13: process_remove_vma removes VMA
  */
 static void test_remove_vma(void) {
-    TEST_START("process_remove_vma removes VMA");
+    TEST_START("RemoveVmaDeletesRegion");
     
     struct process *proc = create_test_process_struct("test_proc13");
     ASSERT(proc != NULL, "Process creation failed");
@@ -445,7 +439,7 @@ static void test_remove_vma(void) {
  * Test 14: VMA isolation between processes
  */
 static void test_cross_process_isolation(void) {
-    TEST_START("VMA isolation between processes");
+    TEST_START("VmaIsolationBetweenProcesses");
     
     struct process *proc1 = create_test_process_struct("test_proc14a");
     struct process *proc2 = create_test_process_struct("test_proc14b");
@@ -475,7 +469,7 @@ static void test_cross_process_isolation(void) {
  * Test 15: Heap boundaries enforce safety margins
  */
 static void test_heap_safety_margins(void) {
-    TEST_START("Heap boundaries enforce safety margins");
+    TEST_START("HeapSafetyMarginsAreMaintained");
     
     struct process *proc = create_test_process_struct("test_proc15");
     ASSERT(proc != NULL, "Process creation failed");
@@ -498,14 +492,12 @@ static void test_heap_safety_margins(void) {
  * Main test runner
  */
 void run_memory_isolation_tests(void) {
-    hal_uart_puts("\n========================================\n");
-    hal_uart_puts("  Memory Isolation Tests\n");
-    hal_uart_puts("========================================\n\n");
-    
-    tests_passed = 0;
-    tests_failed = 0;
-    
-    // Run all tests
+    ktest_suite_t suite;
+
+    ktest_suite_init(&suite, "MemoryIsolation");
+    ktest_suite_begin(&suite);
+    g_suite = &suite;
+
     test_isolated_page_table();
     test_vma_initialization();
     test_code_vma_permissions();
@@ -521,25 +513,8 @@ void run_memory_isolation_tests(void) {
     test_remove_vma();
     test_cross_process_isolation();
     test_heap_safety_margins();
-    
-    // Print summary
-    hal_uart_puts("\n========================================\n");
-    hal_uart_puts("Test Summary:\n");
-    hal_uart_puts("  Passed: ");
-    kprint_dec(tests_passed);
-    hal_uart_puts(" / ");
-    kprint_dec(tests_passed + tests_failed);
-    hal_uart_puts("\n");
-    
-    if (tests_failed == 0) {
-        hal_uart_puts("  Status: ALL TESTS PASSED!\n");
-    } else {
-        hal_uart_puts("  Failed: ");
-        kprint_dec(tests_failed);
-        hal_uart_puts("\n");
-        hal_uart_puts("  Status: SOME TESTS FAILED\n");
-    }
-    hal_uart_puts("========================================\n\n");
+
+    ktest_suite_end(&suite);
 }
 
 #endif // ENABLE_KERNEL_TESTS

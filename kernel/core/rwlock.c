@@ -9,7 +9,69 @@
 #include "kernel/rwlock.h"
 #include "kernel/errno.h"
 #include "kernel/constants.h"
+#include "kernel/process.h"
+#include "kernel/scheduler.h"
 #include "arch/interrupt.h"
+#include "mm/kmalloc.h"
+
+static int rwlock_reader_should_wait(rwlock_t *rw) {
+    return rw->writer || rw->writers_waiting > 0;
+}
+
+static int rwlock_writer_should_wait(rwlock_t *rw) {
+    return rw->readers > 0 || rw->writer;
+}
+
+static int rwlock_wait_atomic(wait_queue_t *queue,
+                              rwlock_t *rw,
+                              int (*should_wait)(rwlock_t *),
+                              uint64_t *flags) {
+    struct process *current = process_current();
+    if (!current) {
+        interrupt_restore(*flags);
+        return -1;
+    }
+
+    wait_queue_entry_t *entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
+    if (!entry) {
+        interrupt_restore(*flags);
+        scheduler_yield();
+        *flags = interrupt_save_disable();
+        return 0;
+    }
+
+    wait_queue_entry_t *prev_tail = queue->tail;
+    entry->proc = current;
+    entry->next = NULL;
+
+    if (prev_tail) {
+        prev_tail->next = entry;
+    } else {
+        queue->head = entry;
+    }
+    queue->tail = entry;
+    queue->count++;
+
+    if (!should_wait(rw)) {
+        if (prev_tail) {
+            prev_tail->next = NULL;
+        } else {
+            queue->head = NULL;
+        }
+        queue->tail = prev_tail;
+        queue->count--;
+        kfree(entry);
+        return 0;
+    }
+
+    current->state = PROC_SLEEPING;
+    scheduler_dequeue(current);
+
+    interrupt_restore(*flags);
+    schedule();
+    *flags = interrupt_save_disable();
+    return 0;
+}
 
 /**
  * @brief Initialize a reader-writer lock
@@ -44,10 +106,10 @@ void rwlock_read_lock(rwlock_t *rw) {
     uint64_t flags = interrupt_save_disable();
     
     /* Wait while a writer holds the lock or writers are waiting */
-    while (rw->writer || rw->writers_waiting > 0) {
-        interrupt_restore(flags);
-        wait_queue_sleep(&rw->reader_queue);
-        flags = interrupt_save_disable();
+    while (rwlock_reader_should_wait(rw)) {
+        if (rwlock_wait_atomic(&rw->reader_queue, rw, rwlock_reader_should_wait, &flags) < 0) {
+            return;
+        }
     }
     
     /* Acquired read lock */
@@ -131,10 +193,11 @@ void rwlock_write_lock(rwlock_t *rw) {
     rw->writers_waiting++;
     
     /* Wait while readers hold the lock or another writer holds it */
-    while (rw->readers > 0 || rw->writer) {
-        interrupt_restore(flags);
-        wait_queue_sleep(&rw->writer_queue);
-        flags = interrupt_save_disable();
+    while (rwlock_writer_should_wait(rw)) {
+        if (rwlock_wait_atomic(&rw->writer_queue, rw, rwlock_writer_should_wait, &flags) < 0) {
+            rw->writers_waiting--;
+            return;
+        }
     }
     
     /* Acquired write lock */

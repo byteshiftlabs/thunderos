@@ -24,6 +24,37 @@
 
 /* Global device state */
 static virtio_blk_device_t *g_blk_device = NULL;
+static volatile int g_blk_request_lock = 0;
+
+static inline void lock_acquire(volatile int *lock)
+{
+    while (__sync_lock_test_and_set(lock, 1)) {
+        /* Spin until the current request completes. */
+    }
+}
+
+static inline void lock_release(volatile int *lock)
+{
+    __sync_lock_release(lock);
+}
+
+static int virtio_blk_request_in_bounds(uint64_t sector, uint32_t count)
+{
+    if (!g_blk_device) {
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_NODEV);
+    }
+
+    if (sector > g_blk_device->capacity) {
+        RETURN_ERRNO(THUNDEROS_EINVAL);
+    }
+
+    if ((uint64_t)count > g_blk_device->capacity - sector) {
+        RETURN_ERRNO(THUNDEROS_EINVAL);
+    }
+
+    clear_errno();
+    return 0;
+}
 
 /* Forward declarations */
 static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size);
@@ -410,8 +441,8 @@ int virtio_blk_read(uint64_t sector, void *buffer, uint32_t count)
         RETURN_ERRNO(THUNDEROS_EVIRTIO_NODEV);
     }
     
-    if (sector + count > g_blk_device->capacity) {
-        RETURN_ERRNO(THUNDEROS_EINVAL);
+    if (virtio_blk_request_in_bounds(sector, count) != 0) {
+        return -1;
     }
     
     /* Allocate request structure from DMA memory (device needs to write status) */
@@ -419,10 +450,12 @@ int virtio_blk_read(uint64_t sector, void *buffer, uint32_t count)
     if (!req_region) {
         RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
-    
+
+    lock_acquire(&g_blk_request_lock);
     virtio_blk_request_t *req = (virtio_blk_request_t *)req_region->virt_addr;
     int result = virtio_blk_do_request(g_blk_device, req, sector, buffer, count, VIRTIO_BLK_T_IN);
-    
+    lock_release(&g_blk_request_lock);
+
     dma_free(req_region);
     
     if (result > 0) {
@@ -449,8 +482,8 @@ int virtio_blk_write(uint64_t sector, const void *buffer, uint32_t count)
         RETURN_ERRNO(THUNDEROS_EFS_RDONLY);
     }
     
-    if (sector + count > g_blk_device->capacity) {
-        RETURN_ERRNO(THUNDEROS_EINVAL);
+    if (virtio_blk_request_in_bounds(sector, count) != 0) {
+        return -1;
     }
     
     /* Allocate request structure from DMA memory */
@@ -458,10 +491,12 @@ int virtio_blk_write(uint64_t sector, const void *buffer, uint32_t count)
     if (!req_region) {
         RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
-    
+
+    lock_acquire(&g_blk_request_lock);
     virtio_blk_request_t *req = (virtio_blk_request_t *)req_region->virt_addr;
     int result = virtio_blk_do_request(g_blk_device, req, sector, (void *)buffer, count, VIRTIO_BLK_T_OUT);
-    
+    lock_release(&g_blk_request_lock);
+
     dma_free(req_region);
     
     if (result > 0) {
@@ -490,7 +525,9 @@ int virtio_blk_flush(void)
     }
     
     virtio_blk_request_t req;
+    lock_acquire(&g_blk_request_lock);
     int result = virtio_blk_do_request(g_blk_device, &req, 0, NULL, 0, VIRTIO_BLK_T_FLUSH);
+    lock_release(&g_blk_request_lock);
     /* errno already set by virtio_blk_do_request if failed */
     return result;
 }

@@ -163,6 +163,8 @@ uint64_t sys_gettty(void);
 uint64_t sys_settty(int tty);
 uint64_t sys_getprocs(procinfo_t *buf, size_t max_procs);
 uint64_t sys_uname(utsname_t *buf);
+uint64_t sys_getuid(void);
+uint64_t sys_getgid(void);
 uint64_t sys_setpgid(int pid, int pgid);
 uint64_t sys_getpgid(int pid);
 uint64_t sys_getsid(int pid);

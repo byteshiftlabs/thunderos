@@ -40,6 +40,8 @@ static inline void lock_release(volatile int *lock) {
     __sync_lock_release(lock);
 }
 
+static int process_copy_to_user(page_table_t *page_table, uint64_t user_addr, const void *src, size_t size);
+
 /**
  * Initialize common process metadata fields
  *
@@ -73,6 +75,29 @@ static void process_init_common(struct process *proc) {
     }
 }
 
+static int process_copy_to_user(page_table_t *page_table, uint64_t user_addr, const void *src, size_t size) {
+    const uint8_t *src_bytes = (const uint8_t *)src;
+
+    for (size_t offset = 0; offset < size; ) {
+        uintptr_t phys_addr;
+        if (virt_to_phys(page_table, user_addr + offset, &phys_addr) != 0) {
+            return -1;
+        }
+
+        size_t page_remaining = PAGE_SIZE - ((size_t)(user_addr + offset) & (PAGE_SIZE - 1));
+        size_t chunk = size - offset;
+        if (chunk > page_remaining) {
+            chunk = page_remaining;
+        }
+
+        kmemcpy((void *)translate_phys_to_virt(phys_addr), src_bytes + offset, chunk);
+        offset += chunk;
+    }
+
+    clear_errno();
+    return 0;
+}
+
 // Forward declarations
 static void forked_child_entry(void);
 
@@ -90,7 +115,8 @@ void process_init(void) {
     struct process *init_proc = &process_table[0];
     init_proc->pid = 0;
     init_proc->state = PROC_RUNNING;
-    kstrcpy(init_proc->name, "init");
+    kstrncpy(init_proc->name, "init", PROC_NAME_LEN - 1);
+    init_proc->name[PROC_NAME_LEN - 1] = '\0';
     init_proc->page_table = get_kernel_page_table();
     init_proc->kernel_stack = 0;  // Uses boot stack
     init_proc->user_stack = 0;
@@ -233,12 +259,13 @@ void process_free(struct process *proc) {
  * @param proc Process to setup
  * @param entry_point Entry point function pointer
  * @param arg First argument to entry point
+ * @return 0 on success, -1 on allocation failure
  */
-static void setup_trap_frame(struct process *proc, void (*entry_point)(void *), void *arg) {
+static int setup_trap_frame(struct process *proc, void (*entry_point)(void *), void *arg) {
     // Allocate trap frame separately (stack allocation would cause corruption)
     proc->trap_frame = (struct trap_frame *)kmalloc(sizeof(struct trap_frame));
     if (!proc->trap_frame) {
-        kernel_panic("setup_trap_frame: failed to allocate trap frame");
+        return -1;
     }
     
     // Zero out trap frame structure
@@ -256,6 +283,7 @@ static void setup_trap_frame(struct process *proc, void (*entry_point)(void *), 
     // Set sstatus for supervisor mode with interrupts enabled
     // SPP=1 (supervisor mode), SPIE=1 (enable interrupts after sret)
     proc->trap_frame->sstatus = (1 << 8) | (1 << 5);
+    return 0;
 }
 
 /**
@@ -292,12 +320,13 @@ static void process_wrapper(void) {
  * @param name Process name (max PROC_NAME_LEN-1 characters)
  * @param entry_point Function to execute as process entry point
  * @param arg First argument passed to entry point
- * @return Pointer to new process, NULL on failure (panics on critical errors)
+ * @return Pointer to new process, or NULL on failure (errno set to EAGAIN if
+ *         process table is full, ENOMEM if a memory allocation failed)
  */
 struct process *process_create(const char *name, void (*entry_point)(void *), void *arg) {
     struct process *proc = alloc_process();
     if (!proc) {
-        kernel_panic("process_create: Process table full");
+        RETURN_ERRNO_NULL(THUNDEROS_EAGAIN);
     }
     
     // Assign unique PID
@@ -310,7 +339,8 @@ struct process *process_create(const char *name, void (*entry_point)(void *), vo
     // Allocate kernel stack for trap handling and context switching
     proc->kernel_stack = (uintptr_t)kmalloc((size_t)KERNEL_STACK_SIZE);
     if (!proc->kernel_stack) {
-        kernel_panic("process_create: Failed to allocate kernel stack");
+        process_free(proc);
+        RETURN_ERRNO_NULL(THUNDEROS_ENOMEM);
     }
     
     // Use kernel page table (kernel mode process)
@@ -319,13 +349,17 @@ struct process *process_create(const char *name, void (*entry_point)(void *), vo
     // Allocate user stack (in kernel space for kernel mode processes)
     proc->user_stack = (uintptr_t)kmalloc((size_t)USER_STACK_SIZE);
     if (!proc->user_stack) {
-        kernel_panic("process_create: Failed to allocate user stack");
+        process_free(proc);
+        RETURN_ERRNO_NULL(THUNDEROS_ENOMEM);
     }
     
     // Setup initial trap frame with entry point and argument
-    setup_trap_frame(proc, entry_point, arg);
-    if (!proc->trap_frame) {
-        kernel_panic("process_create: Failed to allocate trap frame");
+    if (setup_trap_frame(proc, entry_point, arg) != 0) {
+        // user_stack is a kernel alloc not freed by process_free — free it explicitly
+        kfree((void *)proc->user_stack);
+        proc->user_stack = 0;
+        process_free(proc);
+        RETURN_ERRNO_NULL(THUNDEROS_ENOMEM);
     }
     
     // Setup kernel context for initial context switch
@@ -561,6 +595,8 @@ void process_sleep(uint64_t ticks) {
 void process_check_sleepers(void) {
     extern uint64_t hal_timer_get_ticks(void);
     uint64_t now = hal_timer_get_ticks();
+
+    lock_acquire(&process_lock);
     
     for (int i = 0; i < MAX_PROCS; i++) {
         struct process *p = &process_table[i];
@@ -570,6 +606,8 @@ void process_check_sleepers(void) {
             scheduler_enqueue(p);
         }
     }
+
+    lock_release(&process_lock);
 }
 
 /**
@@ -584,6 +622,9 @@ void process_wakeup(struct process *proc) {
     
     lock_acquire(&process_lock);
     if (proc->state == PROC_SLEEPING || proc->state == PROC_STOPPED) {
+        if (proc->state == PROC_SLEEPING) {
+            proc->sleep_until_tick = 0;
+        }
         proc->state = PROC_READY;
         scheduler_enqueue(proc);
     }
@@ -659,7 +700,8 @@ pid_t process_fork(struct trap_frame *current_tf) {
     child->pid = alloc_pid();
     
     // Copy basic process info
-    kstrcpy(child->name, parent->name);
+    kstrncpy(child->name, parent->name, PROC_NAME_LEN - 1);
+    child->name[PROC_NAME_LEN - 1] = '\0';
     child->state = PROC_READY;
     child->parent = parent;
     child->cpu_time = 0;
@@ -949,7 +991,9 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
                                    void *code_mem, size_t code_size, 
                                    uint64_t entry_point,
                                    const elf_segment_info_t *segments,
-                                   int num_segments) {
+                                   int num_segments,
+                                   const char *argv[],
+                                   int argc) {
     if (!name || !code_mem || code_size == 0) {
         return NULL;
     }
@@ -1129,12 +1173,105 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
         process_free(proc);
         return NULL;
     }
+
+    if (process_setup_args(proc, argv, argc) != 0) {
+        process_cleanup_vmas(proc);
+        free_page_table(proc->page_table);
+        kfree((void *)proc->kernel_stack);
+        kfree(proc->trap_frame);
+        process_free(proc);
+        return NULL;
+    }
     
     // Mark as ready and enqueue for scheduling
     proc->state = PROC_READY;
     scheduler_enqueue(proc);
     
     return proc;
+}
+
+int process_setup_args(struct process *proc, const char *argv[], int argc) {
+    if (!proc || !proc->trap_frame || !proc->page_table) {
+        RETURN_ERRNO(THUNDEROS_EINVAL);
+    }
+
+    if (argc < 0 || argc > MAX_EXEC_ARGS) {
+        RETURN_ERRNO(THUNDEROS_E2BIG);
+    }
+
+    uint64_t sp = USER_STACK_TOP;
+    uint64_t argv_addrs[MAX_EXEC_ARGS + 1];
+    int actual_argc = argc;
+
+    if (!argv || argc == 0) {
+        proc->trap_frame->sp = sp;
+        proc->trap_frame->s0 = sp;
+        proc->trap_frame->a0 = 0;
+        proc->trap_frame->a1 = 0;
+        clear_errno();
+        return 0;
+    }
+
+    while (actual_argc > 0 && !argv[actual_argc - 1]) {
+        actual_argc--;
+    }
+
+    for (int i = actual_argc - 1; i >= 0; i--) {
+        size_t len = 0;
+
+        if (!argv[i]) {
+            RETURN_ERRNO(THUNDEROS_EINVAL);
+        }
+
+        while (argv[i][len] && len < MAX_ARG_LEN) {
+            len++;
+        }
+        if (len == MAX_ARG_LEN) {
+            RETURN_ERRNO(THUNDEROS_E2BIG);
+        }
+
+        size_t bytes = len + 1;
+        if (sp < proc->user_stack + bytes) {
+            RETURN_ERRNO(THUNDEROS_E2BIG);
+        }
+
+        sp -= bytes;
+        sp &= ~7UL;
+        if (sp < proc->user_stack) {
+            RETURN_ERRNO(THUNDEROS_E2BIG);
+        }
+
+        if (process_copy_to_user(proc->page_table, sp, argv[i], bytes) != 0) {
+            return -1;
+        }
+
+        argv_addrs[i] = sp;
+    }
+
+    argv_addrs[actual_argc] = 0;
+
+    size_t argv_table_size = (size_t)(actual_argc + 1) * sizeof(uint64_t);
+    if (sp < proc->user_stack + argv_table_size) {
+        RETURN_ERRNO(THUNDEROS_E2BIG);
+    }
+
+    sp -= argv_table_size;
+    sp &= ~15UL;
+    if (sp < proc->user_stack) {
+        RETURN_ERRNO(THUNDEROS_E2BIG);
+    }
+
+    if (process_copy_to_user(proc->page_table, sp, argv_addrs, argv_table_size) != 0) {
+        return -1;
+    }
+
+    proc->trap_frame->sp = sp;
+    proc->trap_frame->s0 = sp;
+    proc->trap_frame->a0 = actual_argc;
+    proc->trap_frame->a1 = sp;
+
+    clear_errno();
+    return 0;
 }
 
 /**

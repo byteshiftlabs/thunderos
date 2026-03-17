@@ -237,6 +237,8 @@ int pipe_close_read(pipe_t* pipe) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
 
+    uint64_t flags = interrupt_save_disable();
+
     if (pipe->read_ref_count > 0) {
         pipe->read_ref_count--;
     }
@@ -250,6 +252,8 @@ int pipe_close_read(pipe_t* pipe) {
         // Wake any writers - they'll get EPIPE
         wait_queue_wake(&pipe->writers);
     }
+
+    interrupt_restore(flags);
 
     clear_errno();
     return 0;
@@ -270,6 +274,8 @@ int pipe_close_write(pipe_t* pipe) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
 
+    uint64_t flags = interrupt_save_disable();
+
     if (pipe->write_ref_count > 0) {
         pipe->write_ref_count--;
     }
@@ -283,6 +289,8 @@ int pipe_close_write(pipe_t* pipe) {
         // Wake any readers - they'll get EOF
         wait_queue_wake(&pipe->readers);
     }
+
+    interrupt_restore(flags);
 
     clear_errno();
     return 0;

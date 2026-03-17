@@ -9,6 +9,38 @@ set -euo pipefail
 
 readonly KERNEL_ELF="build/thunderos.elf"
 readonly FS_IMG="build/fs.img"
+readonly MIN_QEMU_VERSION="10.1.2"
+
+version_supported() {
+    local version="$1"
+
+    if [[ -z "${version}" ]]; then
+        return 1
+    fi
+
+    [[ "$(printf '%s\n' "${MIN_QEMU_VERSION}" "${version}" | sort -V | head -1)" == "${MIN_QEMU_VERSION}" ]]
+}
+
+require_supported_qemu() {
+    local qemu_bin
+    local qemu_version
+
+    if ! qemu_bin="$(command -v qemu-system-riscv64 2>/dev/null)"; then
+        echo "✗ ERROR: qemu-system-riscv64 not found" >&2
+        echo "ThunderOS supports QEMU ${MIN_QEMU_VERSION}+ only." >&2
+        echo "Use ./run_os_docker.sh or make qemu-docker." >&2
+        exit 1
+    fi
+
+    qemu_version="$(${qemu_bin} --version | head -1 | grep -oE '[0-9]+\.[0-9]+(\.[0-9]+)?' | head -1 || true)"
+    if ! version_supported "${qemu_version}"; then
+        echo "✗ ERROR: Unsupported QEMU version: ${qemu_version:-unknown}" >&2
+        echo "ThunderOS supports QEMU ${MIN_QEMU_VERSION}+ only." >&2
+        echo "Host QEMU 6.x hangs during early boot on this kernel." >&2
+        echo "Use ./run_os_docker.sh or make qemu-docker." >&2
+        exit 1
+    fi
+}
 
 main() {
     # Build if kernel doesn't exist
@@ -34,13 +66,8 @@ main() {
     echo "  Press ESC+1 or ESC+2 to switch terminals"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    
-    # Check if qemu-system-riscv64 exists
-    if ! command -v qemu-system-riscv64 >/dev/null 2>&1; then
-        echo "✗ ERROR: qemu-system-riscv64 not found" >&2
-        echo "Please install QEMU for RISC-V or run in Docker" >&2
-        exit 1
-    fi
+
+    require_supported_qemu
     
     # Run QEMU with correct flags
     exec qemu-system-riscv64 \

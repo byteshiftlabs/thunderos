@@ -9,7 +9,7 @@ export TERM="${TERM:-dumb}"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${SCRIPT_DIR}/../.."
-BUILD_DIR="${ROOT_DIR}/build"
+BUILD_DIR="${BUILD_DIR:-${ROOT_DIR}/build}"
 OUTPUT_DIR="${SCRIPT_DIR}/../outputs"
 OUTPUT_FILE="${OUTPUT_DIR}/integration_test_output.txt"
 QEMU_TIMEOUT=8
@@ -19,15 +19,10 @@ for arg in "$@"; do
     [ "$arg" = "--skip-build" ] && SKIP_BUILD=1
 done
 
-# shellcheck source=test_helpers.sh
-source "${SCRIPT_DIR}/test_helpers.sh"
+# shellcheck source=structured_test_helpers.sh
+source "${SCRIPT_DIR}/structured_test_helpers.sh"
 
-if command -v qemu-system-riscv64 >/dev/null 2>&1; then
-    QEMU_BIN="qemu-system-riscv64"
-elif [ -x /tmp/qemu-10.1.2/build/qemu-system-riscv64 ]; then
-    QEMU_BIN="/tmp/qemu-10.1.2/build/qemu-system-riscv64"
-else
-    printf "[${_R}  ERROR   ${_N}] qemu-system-riscv64 not found\n" >&2
+if ! testfmt_select_qemu 10; then
     exit 1
 fi
 
@@ -52,7 +47,9 @@ if [ "$SKIP_BUILD" -eq 0 ]; then
     if make userland >/dev/null 2>&1; then
         printf " OK\n"
     else
-        printf " skipped\n"
+        printf " FAILED\n"
+        printf "[${_R}  ERROR   ${_N}] Userland build failed. Ensure the submodule is initialized.\n" >&2
+        exit 1
     fi
 fi
 
@@ -92,16 +89,16 @@ printf " done (%ds)\n\n" "${T_ELAPSED}"
 
 # ── Tests ───────────────────────────────────────────────────────────────────
 
-gtest_suite_begin "Integration"
-gtest_run "Integration.KernelStarted"  "\[OK\] UART initialized"          "${OUTPUT_FILE}"
-gtest_run "Integration.MemoryTests"    "ALL TESTS PASSED"                 "${OUTPUT_FILE}"
-gtest_run "Integration.VirtIOReady"    "\[OK\] VirtIO block device"       "${OUTPUT_FILE}"
-gtest_run "Integration.Ext2Mounted"    "\[OK\] ext2 filesystem mounted"   "${OUTPUT_FILE}"
-gtest_run "Integration.ElfLoaderTests" "ELF Loader Tests"                 "${OUTPUT_FILE}"
-gtest_suite_end "Integration"
+testfmt_suite_begin "Integration"
+testfmt_run "Integration.KernelStarted"  "\[OK\] UART initialized"                    "${OUTPUT_FILE}"
+testfmt_run "Integration.MemoryTests"    "\[----------\] 15 test[(]s[)] from MemoryIsolation" "${OUTPUT_FILE}"
+testfmt_run "Integration.VirtIOReady"    "\[OK\] VirtIO block device"                 "${OUTPUT_FILE}"
+testfmt_run "Integration.Ext2Mounted"    "\[OK\] ext2 filesystem mounted"             "${OUTPUT_FILE}"
+testfmt_run "Integration.ElfLoaderTests" "\[----------\] Tests from ELFLoader"        "${OUTPUT_FILE}"
+testfmt_suite_end "Integration"
 
-gtest_summary "${T_ELAPSED}"
+testfmt_summary "${T_ELAPSED}"
 RESULT=$?
-gtest_export_counts "${OUTPUT_DIR}/.integration_counts"
+testfmt_export_counts "${OUTPUT_DIR}/.integration_counts"
 printf "  Full output: %s\n" "${OUTPUT_FILE}"
 exit $RESULT

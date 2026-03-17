@@ -27,6 +27,7 @@ INCLUDE_DIR := include
 # Build configuration
 ENABLE_TESTS ?= 0
 TEST_MODE ?= 0
+SINGLE_SHELL ?= 0
 
 # Compiler flags
 CFLAGS := -march=rv64gc -mabi=lp64d -mcmodel=medany
@@ -42,6 +43,11 @@ endif
 # Test mode: run tests and halt without launching shell
 ifeq ($(TEST_MODE),1)
     CFLAGS += -DTEST_MODE
+endif
+
+# Single-shell mode: launch only one user shell in normal runtime.
+ifeq ($(SINGLE_SHELL),1)
+	CFLAGS += -DSINGLE_SHELL_MODE
 endif
 
 # Linker flags
@@ -68,7 +74,12 @@ ifeq ($(ENABLE_TESTS),1)
                         tests/unit/test_pmm.c \
                         tests/unit/test_kmalloc.c \
                         tests/unit/test_errno.c \
-                        tests/unit/test_ext2_vfs.c
+						tests/unit/test_ext2_vfs.c \
+						tests/unit/test_wait_queue.c \
+						tests/unit/test_sync_primitives.c \
+						tests/unit/test_syscalls.c \
+						tests/unit/test_pipes.c \
+						tests/unit/test_scheduler_soak.c
 endif
 
 KERNEL_ASM_SOURCES := $(wildcard $(KERNEL_DIR)/arch/riscv64/*.S)
@@ -133,6 +144,7 @@ help:
 	@echo "$(BOLD)Run Targets:$(RESET)"
 	@echo "  $(GREEN)make run$(RESET)          Build and run in QEMU (text mode)"
 	@echo "  $(GREEN)make qemu$(RESET)         Same as 'make run'"
+	@echo "  $(GREEN)make qemu-docker$(RESET)  Run in Docker with supported QEMU 10.1.2"
 	@echo "  $(GREEN)make qemu-gpu$(RESET)     Run with VirtIO GPU (VNC on :5900)"
 	@echo "  $(GREEN)make qemu-gpu-web$(RESET) Run with GPU + noVNC (http://localhost:6080)"
 	@echo ""
@@ -263,9 +275,10 @@ force_fs: userland
 userland:
 	@if [ ! -f userland/lib/user.ld ]; then \
 		echo ""; \
-		echo "$(YELLOW)⚠ Userland submodule not initialized — skipping userland build$(RESET)"; \
-		echo "  Run: git submodule update --init"; \
+		echo "$(RED)✗ Userland submodule not initialized$(RESET)"; \
+		echo "  Run: git submodule update --init --recursive"; \
 		echo ""; \
+		exit 1; \
 	 else \
 		echo ""; \
 		echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"; \
@@ -278,10 +291,14 @@ userland:
 	fi
 
 test:
-	@cd tests/scripts && bash test_runner.sh
+	@cd tests/scripts && bash run_all_tests.sh
 
 test-quick:
-	@cd tests/scripts && bash test_runner.sh --quick
+	@cd tests/scripts && bash run_all_tests.sh --quick
+
+qemu-docker:
+	@chmod +x run_os_docker.sh
+	@./run_os_docker.sh
 
 qemu: userland fs
 	@rm -f $(BUILD_DIR)/kernel/main.o

@@ -83,6 +83,12 @@ uint32_t ext2_alloc_block(ext2_fs_t *fs, uint32_t group) {
         return 0;
     }
     
+    /* NOTE: This bitmap read-modify-write is not serialized. On the current
+     * single-CPU non-preemptive kernel this is safe because VFS operations
+     * run to completion without preemption. When adding SMP or preemptive
+     * kernel mode, a per-filesystem mutex is needed here. Interrupt-based
+     * protection cannot be used because VirtIO block I/O relies on WFI. */
+    
     /* Find first free block */
     uint32_t blocks_per_group = fs->superblock->s_blocks_per_group;
     for (uint32_t i = 0; i < blocks_per_group; i++) {
@@ -202,6 +208,8 @@ uint32_t ext2_alloc_inode(ext2_fs_t *fs, uint32_t group) {
         return 0;
     }
     
+    /* NOTE: Same serialization caveat as ext2_alloc_block — see comment there. */
+    
     /* Find first free inode */
     uint32_t inodes_per_group = fs->superblock->s_inodes_per_group;
     for (uint32_t i = 0; i < inodes_per_group; i++) {
@@ -287,7 +295,6 @@ int ext2_free_inode(ext2_fs_t *fs, uint32_t inode_num) {
     
     /* Update superblock */
     fs->superblock->s_free_inodes_count++;
-    
     kfree(bitmap);
     clear_errno();
     return 0;

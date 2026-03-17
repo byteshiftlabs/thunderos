@@ -36,7 +36,8 @@ void hal_timer_init(unsigned long interval_us) {
     // Enable timer interrupts in sie
     unsigned long sie;
     asm volatile("csrr %0, sie" : "=r"(sie));
-    sie |= SIE_STIE;  // Supervisor Timer Interrupt Enable
+    sie |= SIE_STIE;   // Supervisor Timer Interrupt Enable
+    sie |= SIE_SEIE;   // Supervisor External Interrupt Enable (VirtIO, PLIC)
     asm volatile("csrw sie, %0" :: "r"(sie));
 }
 

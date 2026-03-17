@@ -54,14 +54,11 @@ typedef struct {
  * Load ELF binary from filesystem and create process
  * 
  * @param path Path to ELF binary
- * @param argv Argument array (unused)
- * @param argc Argument count (unused)
+ * @param argv Argument array
+ * @param argc Argument count
  * @return PID of new process, or -1 on error (errno set)
  */
 int elf_load_exec(const char *path, const char *argv[], int argc) {
-    (void)argv;
-    (void)argc;
-    
     /* Open file */
     int fd = vfs_open(path, O_RDONLY, 0);
     if (fd < 0) {
@@ -235,7 +232,8 @@ int elf_load_exec(const char *path, const char *argv[], int argc) {
     }
     
     /* Create user process with loaded code and custom entry point */
-    struct process *proc = process_create_elf(program_name, min_addr, program_mem_phys, total_size, ehdr.entry, seg_info, num_load_segments);
+    struct process *proc = process_create_elf(program_name, min_addr, program_mem_phys, total_size,
+                                             ehdr.entry, seg_info, num_load_segments, argv, argc);
     
     if (seg_info) kfree(seg_info);
     
@@ -625,8 +623,9 @@ int elf_exec_replace(const char *path, const char *argv[], int argc, struct trap
             program_name = p + 1;
         }
     }
-    kstrcpy(proc->name, program_name);
-    
+    kstrncpy(proc->name, program_name, PROC_NAME_LEN - 1);
+    proc->name[PROC_NAME_LEN - 1] = '\0';
+
     /* CRITICAL: Switch to the new page table BEFORE returning to user mode!
      * We just replaced the memory mappings, but the CPU is still using the old
      * page table. Without this switch, we'd execute the old code. */

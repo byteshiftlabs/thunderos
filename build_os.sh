@@ -71,11 +71,13 @@ main() {
     echo "  Build Complete!"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo ""
-    echo "Run ThunderOS with:"
-    echo "  ./run_os.sh"
+    echo "Run ThunderOS with the supported QEMU 10.1.2 Docker environment:"
+    echo "  ./run_os_docker.sh"
     echo ""
     echo "Or use make target:"
-    echo "  make qemu"
+    echo "  make qemu-docker"
+    echo ""
+    echo "Host-side ./run_os.sh requires local QEMU 10.1.2+ and will fail fast otherwise."
 }
 
 main "$@"

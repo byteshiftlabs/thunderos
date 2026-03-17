@@ -14,6 +14,14 @@
 #include "arch/interrupt.h"
 #include "hal/hal_uart.h"
 
+#ifdef ENABLE_KERNEL_TESTS
+static int g_wait_queue_force_alloc_failure = 0;
+
+void wait_queue_test_force_alloc_failure(int enabled) {
+    g_wait_queue_force_alloc_failure = enabled;
+}
+#endif
+
 /**
  * Initialize a wait queue
  */
@@ -47,12 +55,20 @@ int wait_queue_sleep(wait_queue_t *wq) {
     int old_state = interrupt_save_disable();
     
     // Allocate wait queue entry
+#ifdef ENABLE_KERNEL_TESTS
+    wait_queue_entry_t *entry = NULL;
+    if (g_wait_queue_force_alloc_failure) {
+        g_wait_queue_force_alloc_failure = 0;
+    } else {
+        entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
+    }
+#else
     wait_queue_entry_t *entry = (wait_queue_entry_t *)kmalloc(sizeof(wait_queue_entry_t));
+#endif
     if (!entry) {
-        // Failed to allocate - yield to prevent busy-spin, let caller retry
+        // Allocation failed before queue insertion; do not yield or sleep.
         interrupt_restore(old_state);
         set_errno(THUNDEROS_ENOMEM);
-        schedule();
         return -1;
     }
     

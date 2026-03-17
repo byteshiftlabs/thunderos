@@ -33,6 +33,10 @@ int fb_init(void)
         uint32_t width = 0;
         uint32_t height = 0;
         virtio_gpu_get_dimensions(&width, &height);
+
+        if (width == 0 || height == 0 || width > ((uint32_t)-1) / 4) {
+            RETURN_ERRNO(THUNDEROS_EINVAL);
+        }
         
         g_fb_info.width = width;
         g_fb_info.height = height;
@@ -154,8 +158,13 @@ void fb_clear(uint32_t color)
         break;
     case FB_BACKEND_LINEAR:
         if (g_fb_info.pixels) {
-            uint32_t num_pixels = g_fb_info.width * g_fb_info.height;
-            for (uint32_t i = 0; i < num_pixels; i++) {
+            if (g_fb_info.height != 0 &&
+                (size_t)g_fb_info.width > ((size_t)-1) / g_fb_info.height) {
+                return;
+            }
+
+            size_t num_pixels = (size_t)g_fb_info.width * g_fb_info.height;
+            for (size_t i = 0; i < num_pixels; i++) {
                 g_fb_info.pixels[i] = color;
             }
         }

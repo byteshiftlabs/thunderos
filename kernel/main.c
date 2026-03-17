@@ -50,6 +50,11 @@ extern void test_pmm(void);
 extern void test_kmalloc(void);
 extern void test_errno(void);
 extern void test_vfs_all(void);
+extern void test_wait_queue_all(void);
+extern void test_sync_primitives_all(void);
+extern void test_syscalls_all(void);
+extern void test_pipes_all(void);
+extern void test_scheduler_soak_all(void);
 #endif
 
 /* Forward declarations for helper functions */
@@ -175,7 +180,6 @@ static void run_memory_tests(void) {
     hal_uart_puts("[INFO] Built-in tests completed\n\n");
 
     run_memory_isolation_tests();
-    test_v070_features();
     test_pmm();
     test_kmalloc();
     test_errno();
@@ -333,8 +337,13 @@ static void launch_shell(void) {
     hal_uart_puts("=================================\n");
     hal_uart_puts("\n");
 
-    /* Launch shells on first 2 VTs for testing */
+    /* The shell soak harness uses a single interactive shell to avoid VT2
+     * startup contention obscuring shell/runtime behavior under test. */
+#ifdef SINGLE_SHELL_MODE
+    int num_shells = 1;
+#else
     int num_shells = vterm_available() ? 2 : 1;
+#endif
     int shell_pids[VTERM_MAX_TERMINALS] = {-1, -1, -1, -1, -1, -1};
     
     for (int i = 0; i < num_shells; i++) {
@@ -353,7 +362,7 @@ static void launch_shell(void) {
         }
     }
     
-    if (vterm_available()) {
+    if (vterm_available() && num_shells > 1) {
         hal_uart_puts("[INFO] Switch terminals with ESC+1 or ESC+2\n");
     }
 
@@ -396,8 +405,19 @@ void kernel_main(void) {
     process_init();
     scheduler_init();
 
+#ifdef ENABLE_KERNEL_TESTS
+    test_wait_queue_all();
+    test_sync_primitives_all();
+    test_syscalls_all();
+#endif
+
     pipe_init();
     hal_uart_puts("[OK] Pipe subsystem initialized\n");
+
+#ifdef ENABLE_KERNEL_TESTS
+    test_pipes_all();
+    test_scheduler_soak_all();
+#endif
 
     if (init_block_device() == 0) {
         init_filesystem();
@@ -408,6 +428,10 @@ void kernel_main(void) {
 
     /* Try to initialize GPU (optional - console works without it) */
     init_gpu_device();
+
+#ifdef ENABLE_KERNEL_TESTS
+    test_v070_features();
+#endif
 
 #ifdef TEST_MODE
     hal_uart_puts("\n");

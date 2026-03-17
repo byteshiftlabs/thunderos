@@ -144,20 +144,30 @@ void fbcon_scroll_up(void)
     
     uint32_t *pixels = info.pixels;
     if (!pixels) return;
+
+    if (g_fbcon.rows == 0 || info.width == 0) {
+        return;
+    }
     
-    uint32_t row_pixels = info.width * FONT_HEIGHT;
     uint32_t console_height = g_fbcon.rows * FONT_HEIGHT;
+    if (console_height < FONT_HEIGHT) {
+        fbcon_clear();
+        return;
+    }
+
+    size_t row_pixels = (size_t)info.width * FONT_HEIGHT;
+    size_t visible_rows = (size_t)console_height - FONT_HEIGHT;
     
     /* Copy each row up */
-    for (uint32_t y = 0; y < console_height - FONT_HEIGHT; y++) {
+    for (size_t y = 0; y < visible_rows; y++) {
         for (uint32_t x = 0; x < info.width; x++) {
             pixels[y * info.width + x] = pixels[(y + FONT_HEIGHT) * info.width + x];
         }
     }
     
     /* Clear the last row */
-    uint32_t last_row_start = (console_height - FONT_HEIGHT) * info.width;
-    for (uint32_t i = 0; i < row_pixels; i++) {
+    size_t last_row_start = visible_rows * info.width;
+    for (size_t i = 0; i < row_pixels; i++) {
         pixels[last_row_start + i] = g_fbcon.bg_color;
     }
     
