@@ -45,6 +45,7 @@ ext2_fs_t g_root_ext2_fs;
 extern void test_memory_management(void);
 extern void test_elf_all(void);
 extern void run_memory_isolation_tests(void);
+extern void run_syscall_errno_tests(void);
 #endif
 
 /* Forward declarations for helper functions */
@@ -379,6 +380,11 @@ void kernel_main(void) {
 #endif
 
     process_init();
+
+#ifdef ENABLE_KERNEL_TESTS
+    run_syscall_errno_tests();
+#endif
+
     scheduler_init();
 
     pipe_init();
