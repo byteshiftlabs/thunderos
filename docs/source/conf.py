@@ -1,10 +1,12 @@
 # Configuration file for the Sphinx documentation builder.
 
+from pathlib import Path
+
 # -- Project information -----------------------------------------------------
 project = 'ThunderOS'
 copyright = '2025, ThunderOS Team'
 author = 'ThunderOS Team'
-release = '0.1.0'
+release = (Path(__file__).resolve().parents[2] / 'VERSION').read_text(encoding='utf-8').strip()
 
 # License information
 project_license = 'GPL v3'
