@@ -70,7 +70,7 @@ print_header "ThunderOS Integration Test"
 print_info "Building kernel in test mode (no shell)..."
 
 cd "${ROOT_DIR}"
-if make clean >/dev/null 2>&1 && make TEST_MODE=1 >/dev/null 2>&1; then
+if make clean >/dev/null 2>&1 && make ENABLE_TESTS=1 TEST_MODE=1 >/dev/null 2>&1; then
     print_pass "Kernel build successful"
 else
     print_fail "Kernel build failed"
