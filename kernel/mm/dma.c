@@ -8,6 +8,7 @@
 #include "mm/kmalloc.h"
 #include "hal/hal_uart.h"
 #include "kernel/kstring.h"
+#include "kernel/errno.h"
 
 // Linked list of allocated DMA regions for tracking
 static dma_region_t *dma_regions_head = NULL;
@@ -37,6 +38,12 @@ void dma_init(void) {
  */
 dma_region_t *dma_alloc(size_t size, uint32_t flags) {
     if (size == 0) {
+        set_errno(THUNDEROS_EINVAL);
+        return NULL;
+    }
+
+    if (size > ((size_t)-1) - (PAGE_SIZE - 1)) {
+        set_errno(THUNDEROS_ERANGE);
         return NULL;
     }
     
@@ -48,6 +55,7 @@ dma_region_t *dma_alloc(size_t size, uint32_t flags) {
     uintptr_t phys_addr = pmm_alloc_pages(num_pages);
     if (phys_addr == 0) {
         hal_uart_puts("dma_alloc: failed to allocate physical pages\n");
+        set_errno(THUNDEROS_ENOMEM);
         return NULL;
     }
     
@@ -69,6 +77,7 @@ dma_region_t *dma_alloc(size_t size, uint32_t flags) {
         // Free the physical pages and return
         pmm_free_pages(phys_addr, num_pages);
         hal_uart_puts("dma_alloc: failed to allocate region structure\n");
+        set_errno(THUNDEROS_ENOMEM);
         return NULL;
     }
     
@@ -93,6 +102,8 @@ dma_region_t *dma_alloc(size_t size, uint32_t flags) {
     // Update statistics
     total_regions++;
     total_bytes += aligned_size;
+
+    clear_errno();
     
     return region;
 }

@@ -27,6 +27,12 @@ struct kmalloc_header {
  */
 void *kmalloc(size_t size) {
     if (size == 0) {
+        set_errno(THUNDEROS_EINVAL);
+        return NULL;
+    }
+
+    if (size > ((size_t)-1) - HEADER_SIZE) {
+        set_errno(THUNDEROS_ERANGE);
         return NULL;
     }
     
