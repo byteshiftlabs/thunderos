@@ -939,8 +939,10 @@ uint64_t sys_dup2(int oldfd, int newfd) {
 uint64_t sys_getuid(void) {
     struct process *proc = process_current();
     if (!proc) {
+        clear_errno();
         return 0;  /* Default to root */
     }
+    clear_errno();
     return proc->uid;
 }
 
@@ -952,8 +954,10 @@ uint64_t sys_getuid(void) {
 uint64_t sys_getgid(void) {
     struct process *proc = process_current();
     if (!proc) {
+        clear_errno();
         return 0;  /* Default to root */
     }
+    clear_errno();
     return proc->gid;
 }
 
@@ -965,8 +969,10 @@ uint64_t sys_getgid(void) {
 uint64_t sys_geteuid(void) {
     struct process *proc = process_current();
     if (!proc) {
+        clear_errno();
         return 0;  /* Default to root */
     }
+    clear_errno();
     return proc->euid;
 }
 
@@ -978,8 +984,10 @@ uint64_t sys_geteuid(void) {
 uint64_t sys_getegid(void) {
     struct process *proc = process_current();
     if (!proc) {
+        clear_errno();
         return 0;  /* Default to root */
     }
+    clear_errno();
     return proc->egid;
 }
 
@@ -1061,7 +1069,7 @@ uint64_t sys_getdents(int fd, void *dirp, size_t count) {
     
     // Validate user pointer
     if (!process_validate_user_ptr(proc, dirp, count, VM_WRITE)) {
-        set_errno(THUNDEROS_EINVAL);
+        set_errno(THUNDEROS_EFAULT);
         return SYSCALL_ERROR;
     }
     
@@ -1145,9 +1153,8 @@ uint64_t sys_chdir(const char *path) {
         set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
-    
-    if (!is_valid_user_pointer(path, 1)) {
-        set_errno(THUNDEROS_EINVAL);
+
+    if (validate_user_path_argument(path) != 0) {
         return SYSCALL_ERROR;
     }
     
@@ -1208,7 +1215,7 @@ uint64_t sys_getcwd(char *buf, size_t size) {
     }
     
     if (!process_validate_user_ptr(proc, buf, size, VM_WRITE)) {
-        set_errno(THUNDEROS_EINVAL);
+        set_errno(THUNDEROS_EFAULT);
         return (uint64_t)NULL;
     }
     
@@ -1296,7 +1303,8 @@ uint64_t sys_gettty(void) {
         set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
-    
+
+    clear_errno();
     return (uint64_t)proc->controlling_tty;
 }
 
@@ -1321,8 +1329,9 @@ uint64_t sys_settty(int tty) {
         set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
-    
+
     proc->controlling_tty = tty;
+    clear_errno();
     return 0;
 }
 
@@ -1795,19 +1804,30 @@ uint64_t sys_fork(struct trap_frame *tf) {
  */
 uint64_t sys_execve_with_frame(struct trap_frame *tf, const char *path, const char *argv[], const char *envp[]) {
     (void)envp;
-    
-    if (!is_valid_user_pointer(path, 1)) {
+
+    if (!tf) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
-    
+
+    if (validate_user_path_argument(path) != 0) {
+        return SYSCALL_ERROR;
+    }
+
     // Count arguments
     int argc = 0;
     if (argv) {
         while (argv[argc] && argc < SYSCALL_MAX_ARGC) {
             if (!is_valid_user_pointer(argv[argc], 1)) {
+                set_errno(THUNDEROS_EFAULT);
                 return SYSCALL_ERROR;
             }
             argc++;
+        }
+
+        if (argc == SYSCALL_MAX_ARGC && argv[argc] != NULL) {
+            set_errno(THUNDEROS_E2BIG);
+            return SYSCALL_ERROR;
         }
     }
     
