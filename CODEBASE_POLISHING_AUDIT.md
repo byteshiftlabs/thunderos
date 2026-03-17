@@ -32,6 +32,7 @@ Current audit status: initial inventory complete, full subsystem review not yet 
 | S7 | Serious | Confirmed | kernel/core/process.c; kernel/core/syscall.c | User-memory teardown leaked physical pages on process cleanup and `munmap`, and kernel-mode process stacks were not fully released | Fixed by freeing VMA-backed physical pages during cleanup and unmapping, and by freeing kmalloc-backed kernel-process user stacks |
 | S8 | Serious | Confirmed | kernel/core/syscall.c | Several syscall wrappers returned bare `SYSCALL_ERROR` on validation failures, leaving user-visible `errno` stale or unset | Fixed by centralizing syscall path validation and assigning deterministic errno values for common bad-pointer, bad-fd, invalid-argument, and no-such-process cases |
 | S9 | Serious | Confirmed | kernel/core/syscall.c | Several remaining syscall wrappers still misreported invalid user buffers as `EINVAL`, skipped shared path validation, or left stale `errno` on success-only getters | Fixed by normalizing the remaining pointer-validation sites to `EFAULT`, reusing shared path validation, and clearing errno on successful identity and TTY getters |
+| S10 | Serious | Confirmed | kernel/core/syscall.c; userland/bin/ush.c | Runtime version strings still reported `0.7.0`, so `uname` output and the shell banner disagreed with the branch's canonical `0.9.0` release metadata | Fixed by updating the remaining runtime-facing strings to `0.9.0` |
 
 ## Detailed Findings
 
@@ -135,6 +136,16 @@ No confirmed blockers recorded yet.
 
 - Added tracked kernel regression coverage for syscall errno behavior in `tests/unit/test_syscall_errno.c`.
 - Current coverage includes invalid-user-pointer failures for `getcwd()`, `getdents()`, `chdir()`, and `execve()`, plus stale-errno clearing on successful `getuid()`, `gettty()`, and `settty()` calls.
+
+#### S10
+- Location: `kernel/core/syscall.c`, `userland/bin/ush.c`
+- Confidence: confirmed
+- Problem: even after the earlier metadata cleanup, the runtime-facing strings returned by `sys_uname()` and printed by the user shell banner still advertised `0.7.0`. That left the running system presenting different version information from the repo's canonical `VERSION` file and the already-corrected docs.
+- Why it matters: this is user-visible release drift. Anyone checking the running system with `uname` or reading the shell banner gets stale version information and cannot reliably tell which release the image represents.
+- Recommended fix: update the remaining runtime-facing version strings so they match the canonical `0.9.0` release already used elsewhere in the branch.
+- Test gap: there is still no automated check that compares runtime version strings against the canonical `VERSION` file.
+- Verification note: updated `sys_uname()` to return `0.9.0` / `v0.9.0 Synchronization` and updated the user shell banner to `ThunderOS User Shell v0.9.0`.
+- Status: fixed
 
 ### Minor
 
