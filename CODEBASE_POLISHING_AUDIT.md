@@ -31,6 +31,7 @@ Current audit status: initial inventory complete, full subsystem review not yet 
 | S6 | Serious | Confirmed | kernel/mm/paging.c | User page-table and mapping failure paths leaked paging structures or left dangling mappings to freed pages | Fixed by freeing page tables with `free_page_table()` and cleaning up partially mapped user pages on failure |
 | S7 | Serious | Confirmed | kernel/core/process.c; kernel/core/syscall.c | User-memory teardown leaked physical pages on process cleanup and `munmap`, and kernel-mode process stacks were not fully released | Fixed by freeing VMA-backed physical pages during cleanup and unmapping, and by freeing kmalloc-backed kernel-process user stacks |
 | S8 | Serious | Confirmed | kernel/core/syscall.c | Several syscall wrappers returned bare `SYSCALL_ERROR` on validation failures, leaving user-visible `errno` stale or unset | Fixed by centralizing syscall path validation and assigning deterministic errno values for common bad-pointer, bad-fd, invalid-argument, and no-such-process cases |
+| S9 | Serious | Confirmed | kernel/core/syscall.c | Several remaining syscall wrappers still misreported invalid user buffers as `EINVAL`, skipped shared path validation, or left stale `errno` on success-only getters | Fixed by normalizing the remaining pointer-validation sites to `EFAULT`, reusing shared path validation, and clearing errno on successful identity and TTY getters |
 
 ## Detailed Findings
 
@@ -118,6 +119,16 @@ No confirmed blockers recorded yet.
 - Recommended fix: centralize common path-argument validation, and assign deterministic `errno` values for common wrapper failures such as invalid user pointers, oversized path arguments, invalid file descriptors, invalid process state, and missing child or target processes.
 - Test gap: there is no direct syscall regression coverage asserting `errno` values for user-pointer, bad-fd, and bad-process negative paths.
 - Verification note: added a shared syscall path validator and updated the affected wrappers to set `THUNDEROS_EFAULT`, `THUNDEROS_ERANGE`, `THUNDEROS_EBADF`, `THUNDEROS_EINVAL`, `THUNDEROS_ECHILD`, `THUNDEROS_ESRCH`, `THUNDEROS_ENOMEM`, or `THUNDEROS_EIO` before returning `SYSCALL_ERROR` on these boundary checks.
+- Status: fixed
+
+#### S9
+- Location: `kernel/core/syscall.c`
+- Confidence: confirmed
+- Problem: after the first syscall errno pass, some wrappers still had inconsistent boundary behavior. `getdents()` and `getcwd()` treated invalid user buffers as `THUNDEROS_EINVAL` instead of `THUNDEROS_EFAULT`, `chdir()` and `execve()` bypassed the shared path validator, `execve()` could return a bare error for bad argument pointers, and simple getter syscalls like `getuid()` and `gettty()` could return success with stale errno still set.
+- Why it matters: these inconsistencies keep the user/kernel contract unpredictable. Callers can still receive the wrong class of error for bad user memory, and successful metadata queries can inherit unrelated earlier failures.
+- Recommended fix: normalize the remaining invalid-pointer sites to `THUNDEROS_EFAULT`, route path-taking wrappers through the shared validator, reject oversized `execve()` argument vectors deterministically, and clear errno on simple success-only getters.
+- Test gap: there is still no dedicated syscall regression suite in the tracked kernel tests for bad-fd, tty, and `waitpid` negative paths.
+- Verification note: updated `getdents()`, `getcwd()`, `chdir()`, `execve()`, and the simple identity and terminal getters so their errno behavior matches the rest of the audited syscall boundary.
 - Status: fixed
 
 ### Minor
