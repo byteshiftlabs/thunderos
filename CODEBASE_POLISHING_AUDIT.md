@@ -30,6 +30,7 @@ Current audit status: initial inventory complete, full subsystem review not yet 
 | S5 | Serious | Confirmed | kernel/fs/ext2_vfs.c; kernel/fs/vfs.c | Lookup wrappers overwrote specific ext2/VFS failures with generic `ENOENT`, hiding real causes like invalid directories, allocation failures, or mount-state errors | Fixed by preserving upstream `errno` and only defaulting to `ENOENT` when no specific error is set |
 | S6 | Serious | Confirmed | kernel/mm/paging.c | User page-table and mapping failure paths leaked paging structures or left dangling mappings to freed pages | Fixed by freeing page tables with `free_page_table()` and cleaning up partially mapped user pages on failure |
 | S7 | Serious | Confirmed | kernel/core/process.c; kernel/core/syscall.c | User-memory teardown leaked physical pages on process cleanup and `munmap`, and kernel-mode process stacks were not fully released | Fixed by freeing VMA-backed physical pages during cleanup and unmapping, and by freeing kmalloc-backed kernel-process user stacks |
+| S8 | Serious | Confirmed | kernel/core/syscall.c | Several syscall wrappers returned bare `SYSCALL_ERROR` on validation failures, leaving user-visible `errno` stale or unset | Fixed by centralizing syscall path validation and assigning deterministic errno values for common bad-pointer, bad-fd, invalid-argument, and no-such-process cases |
 
 ## Detailed Findings
 
@@ -107,6 +108,16 @@ No confirmed blockers recorded yet.
 - Recommended fix: release VMA-backed physical pages before freeing page tables or VMAs, free physical pages during `munmap`, and explicitly free kmalloc-backed user stacks for kernel-mode processes.
 - Test gap: there is no stress coverage for repeated `mmap`/`munmap`, repeated user-process create/exit cycles, or kernel-process lifetime cleanup.
 - Verification note: added VMA page-release cleanup in process teardown and region rollback paths, updated `sys_munmap()` to free physical pages, and freed kmalloc-backed kernel-process user stacks during process cleanup.
+- Status: fixed
+
+#### S8
+- Location: `kernel/core/syscall.c`
+- Confidence: confirmed
+- Problem: multiple syscall wrappers validated pointers, path strings, file descriptors, process state, or arguments and then returned `SYSCALL_ERROR` directly without first setting `errno`. That left userland observing stale `errno` from unrelated earlier failures or no specific failure code at all.
+- Why it matters: this breaks the syscall contract at the user/kernel boundary. User programs can see misleading errors from wrappers like `open`, `stat`, `read`, `write`, `waitpid`, `kill`, `mmap`, `munmap`, and terminal-management syscalls even when the kernel already knows the precise validation failure.
+- Recommended fix: centralize common path-argument validation, and assign deterministic `errno` values for common wrapper failures such as invalid user pointers, oversized path arguments, invalid file descriptors, invalid process state, and missing child or target processes.
+- Test gap: there is no direct syscall regression coverage asserting `errno` values for user-pointer, bad-fd, and bad-process negative paths.
+- Verification note: added a shared syscall path validator and updated the affected wrappers to set `THUNDEROS_EFAULT`, `THUNDEROS_ERANGE`, `THUNDEROS_EBADF`, `THUNDEROS_EINVAL`, `THUNDEROS_ECHILD`, `THUNDEROS_ESRCH`, `THUNDEROS_ENOMEM`, or `THUNDEROS_EIO` before returning `SYSCALL_ERROR` on these boundary checks.
 - Status: fixed
 
 ### Minor
