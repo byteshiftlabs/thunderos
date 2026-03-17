@@ -408,7 +408,7 @@ page_table_t *create_user_page_table(void) {
     // After switching to user page table, kernel trap handlers still need
     // to access UART for debug output and logging
     if (map_page(user_pt, QEMU_UART0_BASE, QEMU_UART0_BASE, PTE_KERNEL_DATA) != 0) {
-        kfree(user_pt);
+        free_page_table(user_pt);
         return NULL;
     }
     
@@ -416,7 +416,7 @@ page_table_t *create_user_page_table(void) {
     // Kernel needs this during syscalls that access filesystem and graphics
     for (uintptr_t addr = QEMU_VIRTIO_BASE; addr <= QEMU_VIRTIO_END; addr += QEMU_VIRTIO_STRIDE) {
         if (map_page(user_pt, addr, addr, PTE_KERNEL_DATA) != 0) {
-            kfree(user_pt);
+            free_page_table(user_pt);
             return NULL;
         }
     }
@@ -424,7 +424,7 @@ page_table_t *create_user_page_table(void) {
     // Map CLINT MMIO region for timer and interrupt handling
     // Supervisor mode needs this for IPI and scheduling timer management
     if (map_page(user_pt, QEMU_CLINT_BASE, QEMU_CLINT_BASE, PTE_KERNEL_DATA) != 0) {
-        kfree(user_pt);
+        free_page_table(user_pt);
         return NULL;
     }
     
@@ -464,14 +464,22 @@ int map_user_code(page_table_t *page_table, uintptr_t user_vaddr,
     // Map each page with user code
     uint8_t *src = (uint8_t *)kernel_code;
     size_t src_offset = 0;  // Track total source bytes copied
+    uintptr_t allocated_pages[num_pages];
+    size_t mapped_pages = 0;
     
     for (size_t i = 0; i < num_pages; i++) {
         // Allocate physical page from physical memory manager
         uintptr_t phys_page = pmm_alloc_page();
         if (phys_page == 0) {
-            // TODO: Clean up previously allocated pages
+            while (mapped_pages > 0) {
+                mapped_pages--;
+                unmap_page(page_table, vaddr + (mapped_pages * PAGE_SIZE));
+                pmm_free_page(allocated_pages[mapped_pages]);
+            }
             RETURN_ERRNO(THUNDEROS_ENOMEM);
         }
+
+        allocated_pages[mapped_pages] = phys_page;
         
         // Zero the page first (security: clear any old data)
         uint8_t *page_ptr = (uint8_t *)phys_page;
@@ -509,9 +517,16 @@ int map_user_code(page_table_t *page_table, uintptr_t user_vaddr,
         uintptr_t map_vaddr = vaddr + (i * PAGE_SIZE);
         if (map_page(page_table, map_vaddr, phys_page, PTE_USER_TEXT) != 0) {
             pmm_free_page(phys_page);
+            while (mapped_pages > 0) {
+                mapped_pages--;
+                unmap_page(page_table, vaddr + (mapped_pages * PAGE_SIZE));
+                pmm_free_page(allocated_pages[mapped_pages]);
+            }
             /* errno already set by map_page */
             return -1;
         }
+
+        mapped_pages++;
     }
     
     return 0;
@@ -569,6 +584,7 @@ int map_user_memory(page_table_t *page_table, uintptr_t user_vaddr,
             if (phys_page == 0) {
                 // Free all previously allocated pages
                 for (size_t j = 0; j < allocated_count; j++) {
+                    unmap_page(page_table, vaddr + (j * PAGE_SIZE));
                     pmm_free_page(allocated_pages[j]);
                 }
                 kfree(allocated_pages);
@@ -594,9 +610,14 @@ int map_user_memory(page_table_t *page_table, uintptr_t user_vaddr,
             // Free all allocated pages on failure
             if (allocate_pages) {
                 for (size_t j = 0; j < allocated_count; j++) {
+                    unmap_page(page_table, vaddr + (j * PAGE_SIZE));
                     pmm_free_page(allocated_pages[j]);
                 }
                 kfree(allocated_pages);
+            } else {
+                for (size_t j = 0; j < i; j++) {
+                    unmap_page(page_table, vaddr + (j * PAGE_SIZE));
+                }
             }
             /* errno already set by map_page */
             return -1;
