@@ -12,6 +12,7 @@
 #include "kernel/constants.h"
 #include "hal/hal_timer.h"
 #include "mm/paging.h"
+#include "mm/pmm.h"
 #include "kernel/process.h"
 #include "hal/hal_uart.h"
 #include "kernel/scheduler.h"
@@ -31,6 +32,7 @@ extern void sbi_reboot(void);
 
 // Forward declarations
 static int is_valid_user_pointer(const void *pointer, size_t length);
+static int validate_user_path_argument(const char *path);
 
 /**
  * is_valid_user_pointer - Validate user-space pointer with memory isolation
@@ -67,6 +69,31 @@ static int is_valid_user_pointer(const void *pointer, size_t length) {
     return process_validate_user_ptr(proc, pointer, length, VM_USER);
 }
 
+static int validate_user_path_argument(const char *path) {
+    if (!is_valid_user_pointer(path, 1)) {
+        set_errno(THUNDEROS_EFAULT);
+        return -1;
+    }
+
+    size_t path_len = 0;
+    while (path[path_len] && path_len < SYSCALL_MAX_PATH) {
+        path_len++;
+    }
+
+    if (path_len == 0) {
+        set_errno(THUNDEROS_EINVAL);
+        return -1;
+    }
+
+    if (path_len >= SYSCALL_MAX_PATH) {
+        set_errno(THUNDEROS_ERANGE);
+        return -1;
+    }
+
+    clear_errno();
+    return 0;
+}
+
 /**
  * sys_exit - Terminate the current process
  * 
@@ -94,6 +121,7 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
     
     struct process *current = process_current();
     if (!current) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
@@ -148,6 +176,7 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
         
         if (!found_child) {
             // No such child process
+            set_errno(THUNDEROS_ECHILD);
             return SYSCALL_ERROR;
         }
         
@@ -167,6 +196,7 @@ uint64_t sys_getpid(void) {
     struct process *current_process = process_current();
     
     if (current_process == NULL) {
+        set_errno(THUNDEROS_ESRCH);
         return SYSCALL_ERROR;
     }
     
@@ -186,6 +216,7 @@ uint64_t sys_getpid(void) {
 uint64_t sys_sbrk(int heap_increment) {
     struct process *proc = process_current();
     if (!proc) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
@@ -200,12 +231,14 @@ uint64_t sys_sbrk(int heap_increment) {
     
     // Validate new break is within reasonable bounds
     if (new_brk < proc->heap_start) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;  // Can't shrink below heap start
     }
     
     // Don't let heap grow into stack (leave safety margin)
     uint64_t stack_bottom = USER_STACK_TOP - (uint64_t)USER_STACK_SIZE;
     if (new_brk >= stack_bottom - HEAP_STACK_SAFETY_MARGIN) {
+        set_errno(THUNDEROS_ENOMEM);
         return SYSCALL_ERROR;
     }
     
@@ -346,6 +379,7 @@ uint64_t sys_getppid(void) {
  */
 uint64_t sys_kill(int pid, int signal) {
     if (pid <= 0) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
@@ -353,6 +387,7 @@ uint64_t sys_kill(int pid, int signal) {
     extern struct process *process_get(int pid);
     struct process *target = process_get(pid);
     if (!target) {
+        set_errno(THUNDEROS_ESRCH);
         return SYSCALL_ERROR;  /* No such process */
     }
     
@@ -388,19 +423,7 @@ uint64_t sys_gettime(void) {
  * @return File descriptor on success, -1 on error
  */
 uint64_t sys_open(const char *path, int flags, int mode) {
-    if (!is_valid_user_pointer(path, 1)) {
-        return SYSCALL_ERROR;
-    }
-    
-    // Validate path length
-    size_t path_len = 0;
-    const char *p = path;
-    while (*p && path_len < 4096) {
-        p++;
-        path_len++;
-    }
-    
-    if (path_len == 0 || path_len >= 4096) {
+    if (validate_user_path_argument(path) != 0) {
         return SYSCALL_ERROR;
     }
     
@@ -443,6 +466,7 @@ uint64_t sys_open(const char *path, int flags, int mode) {
 uint64_t sys_close(int fd) {
     // Don't allow closing stdin/stdout/stderr
     if (fd <= STDERR_FD) {
+        set_errno(THUNDEROS_EBADF);
         return SYSCALL_ERROR;
     }
     
@@ -466,6 +490,7 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
     
     // Validate user buffer with write permission (we're writing to it)
     if (!process_validate_user_ptr(proc, buffer, byte_count, VM_WRITE | VM_USER)) {
+        set_errno(THUNDEROS_EFAULT);
         return SYSCALL_ERROR;
     }
     
@@ -545,6 +570,7 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
     
     // Handle regular file descriptors
     if (file_descriptor <= STDERR_FD) {
+        set_errno(THUNDEROS_EBADF);
         return SYSCALL_ERROR;
     }
     
@@ -573,6 +599,7 @@ uint64_t sys_write(int file_descriptor, const char *buffer, size_t byte_count) {
     
     // Validate user buffer with read permission (we're reading from it)
     if (!process_validate_user_ptr(proc, buffer, byte_count, VM_READ | VM_USER)) {
+        set_errno(THUNDEROS_EFAULT);
         return SYSCALL_ERROR;
     }
     
@@ -601,6 +628,7 @@ uint64_t sys_write(int file_descriptor, const char *buffer, size_t byte_count) {
             // Fallback to UART only
             int bytes_written = hal_uart_write(buffer, byte_count);
             if (bytes_written != (int)byte_count) {
+                set_errno(THUNDEROS_EIO);
                 return SYSCALL_ERROR;
             }
         }
@@ -609,6 +637,7 @@ uint64_t sys_write(int file_descriptor, const char *buffer, size_t byte_count) {
     
     // Handle stdin (cannot write)
     if (file_descriptor == STDIN_FD) {
+        set_errno(THUNDEROS_EBADF);
         return SYSCALL_ERROR;
     }
     
@@ -632,6 +661,7 @@ uint64_t sys_write(int file_descriptor, const char *buffer, size_t byte_count) {
 uint64_t sys_lseek(int fd, int64_t offset, int whence) {
     // Don't allow seeking on stdin/stdout/stderr
     if (fd <= STDERR_FD) {
+        set_errno(THUNDEROS_EBADF);
         return SYSCALL_ERROR;
     }
     
@@ -648,6 +678,7 @@ uint64_t sys_lseek(int fd, int64_t offset, int whence) {
             vfs_whence = SEEK_END;
             break;
         default:
+            set_errno(THUNDEROS_EINVAL);
             return SYSCALL_ERROR;
     }
     
@@ -667,19 +698,12 @@ uint64_t sys_lseek(int fd, int64_t offset, int whence) {
  * @return 0 on success, -1 on error
  */
 uint64_t sys_stat(const char *path, void *statbuf) {
-    if (!is_valid_user_pointer(path, 1) || !is_valid_user_pointer(statbuf, sizeof(vfs_stat_t))) {
+    if (validate_user_path_argument(path) != 0) {
         return SYSCALL_ERROR;
     }
-    
-    // Validate path length
-    size_t path_len = 0;
-    const char *p = path;
-    while (*p && path_len < SYSCALL_MAX_PATH) {
-        p++;
-        path_len++;
-    }
-    
-    if (path_len == 0 || path_len >= SYSCALL_MAX_PATH) {
+
+    if (!is_valid_user_pointer(statbuf, sizeof(vfs_stat_t))) {
+        set_errno(THUNDEROS_EFAULT);
         return SYSCALL_ERROR;
     }
     
@@ -696,19 +720,7 @@ uint64_t sys_stat(const char *path, void *statbuf) {
  * @return 0 on success, -1 on error
  */
 uint64_t sys_mkdir(const char *path, int mode) {
-    if (!is_valid_user_pointer(path, 1)) {
-        return SYSCALL_ERROR;
-    }
-    
-    // Validate path length
-    size_t path_len = 0;
-    const char *p = path;
-    while (*p && path_len < SYSCALL_MAX_PATH) {
-        p++;
-        path_len++;
-    }
-    
-    if (path_len == 0 || path_len >= SYSCALL_MAX_PATH) {
+    if (validate_user_path_argument(path) != 0) {
         return SYSCALL_ERROR;
     }
     
@@ -723,19 +735,7 @@ uint64_t sys_mkdir(const char *path, int mode) {
  * @return 0 on success, -1 on error
  */
 uint64_t sys_unlink(const char *path) {
-    if (!is_valid_user_pointer(path, 1)) {
-        return SYSCALL_ERROR;
-    }
-    
-    // Validate path length
-    size_t path_len = 0;
-    const char *p = path;
-    while (*p && path_len < SYSCALL_MAX_PATH) {
-        p++;
-        path_len++;
-    }
-    
-    if (path_len == 0 || path_len >= SYSCALL_MAX_PATH) {
+    if (validate_user_path_argument(path) != 0) {
         return SYSCALL_ERROR;
     }
     
@@ -750,19 +750,7 @@ uint64_t sys_unlink(const char *path) {
  * @return 0 on success, -1 on error
  */
 uint64_t sys_rmdir(const char *path) {
-    if (!is_valid_user_pointer(path, 1)) {
-        return SYSCALL_ERROR;
-    }
-    
-    // Validate path length
-    size_t path_len = 0;
-    const char *p = path;
-    while (*p && path_len < SYSCALL_MAX_PATH) {
-        p++;
-        path_len++;
-    }
-    
-    if (path_len == 0 || path_len >= SYSCALL_MAX_PATH) {
+    if (validate_user_path_argument(path) != 0) {
         return SYSCALL_ERROR;
     }
     
@@ -786,6 +774,7 @@ uint64_t sys_rmdir(const char *path) {
 uint64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, uint64_t offset) {
     struct process *proc = process_current();
     if (!proc || length == 0) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
@@ -835,6 +824,7 @@ uint64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, uint64
 uint64_t sys_munmap(void *addr, size_t length) {
     struct process *proc = process_current();
     if (!proc || !addr || length == 0) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
@@ -844,6 +834,7 @@ uint64_t sys_munmap(void *addr, size_t length) {
     // Find and remove VMA
     vm_area_t *vma = process_find_vma(proc, start);
     if (!vma || vma->start != start) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;  // Address not start of mapping
     }
     
@@ -900,11 +891,13 @@ uint64_t sys_munmap(void *addr, size_t length) {
 uint64_t sys_pipe(int pipefd[2]) {
     struct process *proc = process_current();
     if (!proc) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
     // Validate user pointer
     if (!pipefd || !process_validate_user_ptr(proc, pipefd, sizeof(int) * 2, VM_WRITE)) {
+        set_errno(THUNDEROS_EFAULT);
         return SYSCALL_ERROR;
     }
     
@@ -998,8 +991,7 @@ uint64_t sys_getegid(void) {
  * @return 0 on success, -1 on error
  */
 uint64_t sys_chmod(const char *path, uint32_t mode) {
-    if (!path) {
-        set_errno(THUNDEROS_EINVAL);
+    if (validate_user_path_argument(path) != 0) {
         return SYSCALL_ERROR;
     }
     
@@ -1019,8 +1011,7 @@ uint64_t sys_chmod(const char *path, uint32_t mode) {
  * @return 0 on success, -1 on error
  */
 uint64_t sys_chown(const char *path, uint16_t uid, uint16_t gid) {
-    if (!path) {
-        set_errno(THUNDEROS_EINVAL);
+    if (validate_user_path_argument(path) != 0) {
         return SYSCALL_ERROR;
     }
     
@@ -1302,6 +1293,7 @@ uint64_t sys_getsid(int pid) {
 uint64_t sys_gettty(void) {
     struct process *proc = process_current();
     if (!proc) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
@@ -1320,11 +1312,13 @@ uint64_t sys_gettty(void) {
 uint64_t sys_settty(int tty) {
     struct process *proc = process_current();
     if (!proc) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
     /* Validate terminal index */
     if (tty < -1 || tty >= VTERM_MAX_TERMINALS) {
+        set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
     
