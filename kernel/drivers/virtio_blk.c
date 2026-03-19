@@ -204,10 +204,11 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
                                   uint32_t type)
 {
     virtqueue_t *vq = &dev->queue;
+    uint32_t desc_count = (type == VIRTIO_BLK_T_FLUSH && sectors == 0 && buffer == NULL) ? 2 : 3;
     
-    /* Allocate 3 descriptors: header, data buffer, status */
+    /* Flush requests are zero-payload and only need header/status descriptors. */
     uint16_t desc_idx = 0;
-    if (virtqueue_alloc_desc_chain(vq, &desc_idx, 3) < 0) {
+    if (virtqueue_alloc_desc_chain(vq, &desc_idx, desc_count) < 0) {
         return -1;
     }
     
@@ -220,38 +221,50 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
     
     /* Get physical addresses for all buffers */
     uintptr_t header_phys = translate_virt_to_phys((uintptr_t)&req->header);
-    uintptr_t data_phys = translate_virt_to_phys((uintptr_t)buffer);
+    uintptr_t data_phys = 0;
     uintptr_t status_phys = translate_virt_to_phys((uintptr_t)&req->status);
+    if (desc_count == 3) {
+        data_phys = translate_virt_to_phys((uintptr_t)buffer);
+    }
     
-    if (header_phys == 0 || data_phys == 0 || status_phys == 0) {
+    if (header_phys == 0 || status_phys == 0 || (desc_count == 3 && data_phys == 0)) {
         virtqueue_free_desc_chain(vq, desc_idx);
         RETURN_ERRNO(THUNDEROS_EIO);
     }
     
-    /* Descriptor 0: Request header (device reads) */
     uint16_t idx0 = desc_idx;
     uint16_t idx1 = vq->desc[idx0].next;  // Get pre-allocated next descriptor
-    uint16_t idx2 = vq->desc[idx1].next;  // Get third descriptor
     
+    /* Descriptor 0: Request header (device reads) */
     vq->desc[idx0].addr = header_phys;
     vq->desc[idx0].len = sizeof(virtio_blk_req_header_t);
     vq->desc[idx0].flags = VIRTQ_DESC_F_NEXT;
-    // idx0.next is already set to idx1 from allocation
+    vq->desc[idx0].next = idx1;
     
-    /* Descriptor 1: Data buffer (device reads for write, writes for read) */
-    vq->desc[idx1].addr = data_phys;
-    vq->desc[idx1].len = sectors * VIRTIO_BLK_SECTOR_SIZE;
-    vq->desc[idx1].flags = VIRTQ_DESC_F_NEXT;
-    if (type == VIRTIO_BLK_T_IN) {
-        vq->desc[idx1].flags |= VIRTQ_DESC_F_WRITE;
+    if (desc_count == 3) {
+        uint16_t idx2 = vq->desc[idx1].next;  // Get third descriptor
+
+        /* Descriptor 1: Data buffer (device reads for write, writes for read) */
+        vq->desc[idx1].addr = data_phys;
+        vq->desc[idx1].len = sectors * VIRTIO_BLK_SECTOR_SIZE;
+        vq->desc[idx1].flags = VIRTQ_DESC_F_NEXT;
+        vq->desc[idx1].next = idx2;
+        if (type == VIRTIO_BLK_T_IN) {
+            vq->desc[idx1].flags |= VIRTQ_DESC_F_WRITE;
+        }
+
+        /* Descriptor 2: Status byte (device writes) */
+        vq->desc[idx2].addr = status_phys;
+        vq->desc[idx2].len = 1;
+        vq->desc[idx2].flags = VIRTQ_DESC_F_WRITE;
+        vq->desc[idx2].next = 0;
+    } else {
+        /* Descriptor 1: Status byte for zero-payload requests */
+        vq->desc[idx1].addr = status_phys;
+        vq->desc[idx1].len = 1;
+        vq->desc[idx1].flags = VIRTQ_DESC_F_WRITE;
+        vq->desc[idx1].next = 0;
     }
-    // idx1.next is already set to idx2 from allocation
-    
-    /* Descriptor 2: Status byte (device writes) */
-    vq->desc[idx2].addr = status_phys;
-    vq->desc[idx2].len = 1;
-    vq->desc[idx2].flags = VIRTQ_DESC_F_WRITE;  // Last descriptor, no NEXT flag
-    vq->desc[idx2].next = 0;
     
     /* Memory barrier - ensure descriptor writes complete */
     write_barrier();
