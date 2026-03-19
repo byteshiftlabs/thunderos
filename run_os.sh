@@ -7,6 +7,7 @@ ROOT_DIR="${SCRIPT_DIR}"
 BUILD_DIR="${ROOT_DIR}/build"
 KERNEL_ELF="${BUILD_DIR}/thunderos.elf"
 FS_IMG="${BUILD_DIR}/fs.img"
+QEMU_ACCEL_FLAGS_DEFAULT="-accel tcg,thread=multi"
 
 find_qemu() {
     if [[ -n "${QEMU_BIN:-}" ]]; then
@@ -48,14 +49,19 @@ require_artifact() {
 
 main() {
     local qemu_bin
+    local accel_flags
+    local extra_flags
 
     qemu_bin="$(find_qemu)"
     require_artifact "${KERNEL_ELF}" "kernel ELF"
     require_artifact "${FS_IMG}" "filesystem image"
+    accel_flags="${QEMU_ACCEL_FLAGS:-${QEMU_ACCEL_FLAGS_DEFAULT}}"
+    extra_flags="${QEMU_EXTRA_FLAGS:-}"
 
     echo "Starting ThunderOS with ${qemu_bin}"
     echo "  Kernel: ${KERNEL_ELF}"
     echo "  Disk:   ${FS_IMG}"
+    echo "  QEMU:   ${accel_flags} ${extra_flags}"
 
     exec "${qemu_bin}" \
         -machine virt \
@@ -63,8 +69,10 @@ main() {
         -nographic \
         -serial mon:stdio \
         -bios none \
+        ${accel_flags} \
         -kernel "${KERNEL_ELF}" \
         -global virtio-mmio.force-legacy=false \
+        ${extra_flags} \
         -drive file="${FS_IMG}",if=none,format=raw,id=hd0 \
         -device virtio-blk-device,drive=hd0
 }
