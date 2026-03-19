@@ -217,9 +217,10 @@ void trap_handler(struct trap_frame *tf) {
         handle_exception(tf, cause);
     }
     
-    // Deliver pending signals before returning to user mode
+    // Deliver pending signals only when returning to user mode.
+    // Kernel-mode trap returns must keep their supervisor return frame intact.
     struct process *current = process_current();
-    if (current) {
+    if (current && (tf->sstatus & (1UL << SSTATUS_SPP_BIT)) == 0) {
         // Deliver any pending signals, passing the trap frame so signal
         // handler can modify it to redirect execution
         signal_deliver_with_frame(current, tf);
