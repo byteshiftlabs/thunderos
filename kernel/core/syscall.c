@@ -14,6 +14,7 @@
 #include "mm/paging.h"
 #include "mm/pmm.h"
 #include "kernel/process.h"
+#include "kernel/signal.h"
 #include "hal/hal_uart.h"
 #include "kernel/scheduler.h"
 #include "kernel/panic.h"
@@ -421,6 +422,122 @@ uint64_t sys_kill(int pid, int signal) {
     int result = signal_send(target, signal);
     
     return (result == 0) ? 0 : SYSCALL_ERROR;
+}
+
+/**
+ * sys_signal - Install a signal handler
+ *
+ * Supports the simple ThunderOS signal model used by current userland.
+ * SIG_DFL and SIG_IGN are always accepted. Custom handlers must point to
+ * executable user memory in the caller's address space.
+ *
+ * @param signum Signal number
+ * @param handler Handler function, SIG_DFL, or SIG_IGN
+ * @return Previous handler on success, -1 on error
+ */
+uint64_t sys_signal(int signum, void (*handler)(int)) {
+    struct process *current = process_current();
+
+    if (!current) {
+        set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
+
+    if (handler != SIG_DFL && handler != SIG_IGN &&
+        !process_validate_user_ptr(current, (const void *)handler, 1, VM_EXEC | VM_USER)) {
+        set_errno(THUNDEROS_EFAULT);
+        return SYSCALL_ERROR;
+    }
+
+    sighandler_t old_handler = signal_set_handler(current, signum, handler);
+    if (old_handler == SIG_ERR) {
+        return SYSCALL_ERROR;
+    }
+
+    clear_errno();
+    return (uint64_t)old_handler;
+}
+
+/**
+ * sys_sigaction - Install or query a signal action
+ *
+ * ThunderOS currently supports only the handler field. Per-handler masks,
+ * flags, and sigreturn-based restoration are not implemented yet.
+ *
+ * @param signum Signal number
+ * @param act New action, or NULL to query only
+ * @param oldact Previous action output, or NULL
+ * @return 0 on success, -1 on error
+ */
+uint64_t sys_sigaction(int signum, const void *act, void *oldact) {
+    struct process *current = process_current();
+    const struct sigaction *new_action = (const struct sigaction *)act;
+    struct sigaction *old_action = (struct sigaction *)oldact;
+
+    if (!current) {
+        set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
+
+    if (old_action &&
+        !process_validate_user_ptr(current, old_action, sizeof(*old_action), VM_WRITE | VM_USER)) {
+        set_errno(THUNDEROS_EFAULT);
+        return SYSCALL_ERROR;
+    }
+
+    if (new_action &&
+        !process_validate_user_ptr(current, new_action, sizeof(*new_action), VM_READ | VM_USER)) {
+        set_errno(THUNDEROS_EFAULT);
+        return SYSCALL_ERROR;
+    }
+
+    if (signum <= 0 || signum >= NSIG) {
+        set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
+
+    if (old_action) {
+        old_action->sa_handler = current->signal_handlers[signum];
+        old_action->sa_mask = 0;
+        old_action->sa_flags = 0;
+    }
+
+    if (!new_action) {
+        clear_errno();
+        return SYSCALL_SUCCESS;
+    }
+
+    if (new_action->sa_mask != 0 || new_action->sa_flags != 0) {
+        set_errno(THUNDEROS_ENOSYS);
+        return SYSCALL_ERROR;
+    }
+
+    if (new_action->sa_handler != SIG_DFL && new_action->sa_handler != SIG_IGN &&
+        !process_validate_user_ptr(current, (const void *)new_action->sa_handler, 1, VM_EXEC | VM_USER)) {
+        set_errno(THUNDEROS_EFAULT);
+        return SYSCALL_ERROR;
+    }
+
+    if (signal_set_handler(current, signum, new_action->sa_handler) == SIG_ERR) {
+        return SYSCALL_ERROR;
+    }
+
+    clear_errno();
+    return SYSCALL_SUCCESS;
+}
+
+/**
+ * sys_sigreturn - Return from a user signal handler
+ *
+ * The current signal-delivery model uses a simple return-to-sepc path and
+ * does not yet provide a sigreturn trampoline or full interrupted-context
+ * restoration ABI.
+ *
+ * @return Always fails with ENOSYS until full sigreturn support exists
+ */
+uint64_t sys_sigreturn(void) {
+    set_errno(THUNDEROS_ENOSYS);
+    return SYSCALL_ERROR;
 }
 
 /**
@@ -1959,6 +2076,18 @@ uint64_t syscall_handler(uint64_t syscall_number,
             
         case SYS_KILL:
             return_value = sys_kill((int)argument0, (int)argument1);
+            break;
+
+        case SYS_SIGNAL:
+            return_value = sys_signal((int)argument0, (void (*)(int))argument1);
+            break;
+
+        case SYS_SIGACTION:
+            return_value = sys_sigaction((int)argument0, (const void *)argument1, (void *)argument2);
+            break;
+
+        case SYS_SIGRETURN:
+            return_value = sys_sigreturn();
             break;
             
         case SYS_GETTIME:

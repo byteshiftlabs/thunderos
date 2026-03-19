@@ -10,6 +10,7 @@
 #include "kernel/syscall.h"
 #include "kernel/errno.h"
 #include "kernel/process.h"
+#include "kernel/signal.h"
 #include "kernel/kstring.h"
 #include "hal/hal_uart.h"
 #include "trap.h"
@@ -186,6 +187,35 @@ static void test_gettime_clears_errno(void) {
     TEST_PASS();
 }
 
+static void test_signal_syscall_dispatch_installs_handler(void) {
+    TEST_START("SYS_SIGNAL installs handler through syscall dispatch");
+
+    struct process *current = process_current();
+    current->signal_handlers[SIGUSR1] = SIG_DFL;
+
+    clear_errno();
+    ASSERT_TRUE(syscall_handler(SYS_SIGNAL, SIGUSR1, (uint64_t)SIG_IGN, 0, 0, 0, 0) == (uint64_t)SIG_DFL,
+                "SYS_SIGNAL should return the previous handler");
+    ASSERT_TRUE(current->signal_handlers[SIGUSR1] == SIG_IGN,
+                "SYS_SIGNAL should install the new handler");
+    ASSERT_TRUE(get_errno() == THUNDEROS_OK,
+                "SYS_SIGNAL should clear errno on success");
+
+    TEST_PASS();
+}
+
+static void test_signal_syscall_invalid_handler_sets_efault(void) {
+    TEST_START("SYS_SIGNAL reports EFAULT for invalid handler pointer");
+
+    clear_errno();
+    ASSERT_TRUE(syscall_handler(SYS_SIGNAL, SIGUSR1, USER_CODE_BASE, 0, 0, 0, 0) == (uint64_t)-1,
+                "SYS_SIGNAL should fail for an unmapped user handler pointer");
+    ASSERT_TRUE(get_errno() == THUNDEROS_EFAULT,
+                "SYS_SIGNAL should set EFAULT for an invalid handler pointer");
+
+    TEST_PASS();
+}
+
 void run_syscall_errno_tests(void) {
     struct process *saved_process = process_current();
 
@@ -212,6 +242,8 @@ void run_syscall_errno_tests(void) {
     test_sleep_zero_clears_errno();
     test_yield_clears_errno();
     test_gettime_clears_errno();
+    test_signal_syscall_dispatch_installs_handler();
+    test_signal_syscall_invalid_handler_sets_efault();
 
     process_set_current(saved_process);
 
