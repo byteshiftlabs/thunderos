@@ -983,12 +983,14 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
                                    void *code_mem, size_t code_size, 
                                    uint64_t entry_point) {
     if (!name || !code_mem || code_size == 0) {
+        set_errno(THUNDEROS_EINVAL);
         return NULL;
     }
     
     // Allocate process structure
     struct process *proc = alloc_process();
     if (!proc) {
+        set_errno(THUNDEROS_EAGAIN);
         return NULL;
     }
     
@@ -1003,6 +1005,7 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     proc->kernel_stack = (uintptr_t)kmalloc((size_t)KERNEL_STACK_SIZE);
     if (!proc->kernel_stack) {
         process_free(proc);
+        set_errno(THUNDEROS_ENOMEM);
         return NULL;
     }
     
@@ -1010,6 +1013,7 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     proc->page_table = create_user_page_table();
     if (!proc->page_table) {
         process_free(proc);
+        set_errno(THUNDEROS_ENOMEM);
         return NULL;
     }
     
@@ -1025,6 +1029,7 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
         if (map_page(proc->page_table, vaddr, paddr, 
                            PTE_V | PTE_R | PTE_W | PTE_X | PTE_U) != 0) {
             process_free(proc);
+            set_errno(THUNDEROS_ENOMEM);
             return NULL;
         }
     }
@@ -1037,6 +1042,7 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
         uintptr_t stack_phys = pmm_alloc_page();
         if (!stack_phys) {
             process_free(proc);
+            set_errno(THUNDEROS_ENOMEM);
             return NULL;
         }
         
@@ -1048,6 +1054,7 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
         if (map_page(proc->page_table, stack_vaddr, stack_phys,
                            PTE_V | PTE_R | PTE_W | PTE_U) != 0) {
             process_free(proc);
+            set_errno(THUNDEROS_ENOMEM);
             return NULL;
         }
     }
@@ -1058,6 +1065,7 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     proc->trap_frame = (struct trap_frame *)kmalloc(sizeof(struct trap_frame));
     if (!proc->trap_frame) {
         process_free(proc);
+        set_errno(THUNDEROS_ENOMEM);
         return NULL;
     }
     
@@ -1138,6 +1146,7 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     if (process_add_vma(proc, code_base, code_base + code_size, 
                        VM_READ | VM_WRITE | VM_EXEC | VM_USER) != 0) {
         process_free(proc);
+        /* errno already set by process_add_vma */
         return NULL;
     }
     
@@ -1145,6 +1154,7 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     if (process_add_vma(proc, stack_base_vaddr, USER_STACK_TOP,
                        VM_READ | VM_WRITE | VM_USER | VM_GROWSDOWN) != 0) {
         process_free(proc);
+        /* errno already set by process_add_vma */
         return NULL;
     }
     
@@ -1288,6 +1298,15 @@ int process_add_vma(struct process *proc, uint64_t start, uint64_t end, uint32_t
     if (!proc || start >= end) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
+
+    vm_area_t **link = &proc->vm_areas;
+    while (*link && (*link)->end <= start) {
+        link = &(*link)->next;
+    }
+
+    if (*link && end > (*link)->start) {
+        RETURN_ERRNO(THUNDEROS_EEXIST);
+    }
     
     // Allocate new VMA structure
     vm_area_t *vma = (vm_area_t *)kmalloc(sizeof(vm_area_t));
@@ -1300,9 +1319,9 @@ int process_add_vma(struct process *proc, uint64_t start, uint64_t end, uint32_t
     vma->end = end;
     vma->flags = flags;
     
-    // Add to front of list
-    vma->next = proc->vm_areas;
-    proc->vm_areas = vma;
+    // Insert in ascending address order.
+    vma->next = *link;
+    *link = vma;
 
     clear_errno();
     
@@ -1455,6 +1474,8 @@ int process_map_region(struct process *proc, uint64_t vaddr, uint64_t size, uint
         /* errno already set by process_add_vma */
         return -1;
     }
+
+    clear_errno();
     
     return 0;
 }
@@ -1489,20 +1510,26 @@ int process_validate_user_ptr(struct process *proc, const void *ptr, size_t size
         return 0;
     }
     
-    // Find VMA containing start address
-    vm_area_t *vma = process_find_vma(proc, start);
-    if (!vma) {
-        return 0;  // Start address not mapped
-    }
-    
-    // Check if entire range is within VMA
-    if (end > vma->end) {
-        return 0;  // Range extends beyond VMA
-    }
-    
-    // Check permissions
-    if ((vma->flags & required_flags) != required_flags) {
-        return 0;  // Missing required permissions
+    uint64_t cursor = start;
+    while (cursor < end) {
+        vm_area_t *vma = process_find_vma(proc, cursor);
+        if (!vma) {
+            return 0;  // Address range includes unmapped memory
+        }
+
+        if ((vma->flags & required_flags) != required_flags) {
+            return 0;  // Missing required permissions
+        }
+
+        if (vma->end <= cursor) {
+            return 0;
+        }
+
+        if (end <= vma->end) {
+            return 1;
+        }
+
+        cursor = vma->end;
     }
     
     return 1;

@@ -13,8 +13,10 @@
 #include "mm/paging.h"
 #include "hal/hal_uart.h"
 
-#define ELF_MAGIC 0x464C457F
-#define PT_LOAD   1
+#define ELF_MAGIC     0x464C457F
+#define PT_LOAD       1
+#define ELFCLASS64    2    /* 64-bit ELF */
+#define ELFDATA2LSB   1    /* Little-endian */
 
 typedef struct {
     uint32_t magic;
@@ -82,6 +84,12 @@ int elf_load_exec(const char *path, const char *argv[], int argc) {
         RETURN_ERRNO(THUNDEROS_EELF_MAGIC);
     }
     
+    /* Verify 64-bit little-endian ELF */
+    if (ehdr.class != ELFCLASS64 || ehdr.data != ELFDATA2LSB) {
+        vfs_close(fd);
+        RETURN_ERRNO(THUNDEROS_EELF_ARCH);
+    }
+    
     /* Verify it's a RISC-V executable */
     if (ehdr.machine != EM_RISCV) {
         vfs_close(fd);
@@ -94,8 +102,14 @@ int elf_load_exec(const char *path, const char *argv[], int argc) {
         RETURN_ERRNO(THUNDEROS_EELF_TYPE);
     }
     
+    /* Validate program header entry size */
+    if (ehdr.phentsize != sizeof(elf64_phdr_t)) {
+        vfs_close(fd);
+        RETURN_ERRNO(THUNDEROS_EELF_NOPHDR);
+    }
+    
     /* Read program headers */
-    if (ehdr.phnum == 0 || ehdr.phnum > 16) {
+    if (ehdr.phnum == 0 || ehdr.phnum > ELF_MAX_PROGRAM_HEADERS) {
         vfs_close(fd);
         RETURN_ERRNO(THUNDEROS_EELF_NOPHDR);
     }
@@ -129,10 +143,22 @@ int elf_load_exec(const char *path, const char *argv[], int argc) {
     
     for (int i = 0; i < ehdr.phnum; i++) {
         if (phdrs[i].type == PT_LOAD) {
+            /* Check for vaddr + memsz overflow */
+            if (phdrs[i].memsz > 0 && phdrs[i].vaddr > UINT64_MAX - phdrs[i].memsz) {
+                kfree(phdrs);
+                vfs_close(fd);
+                RETURN_ERRNO(THUNDEROS_EELF_NOPHDR);
+            }
+            /* Reject segments targeting kernel address space */
+            uint64_t seg_end = phdrs[i].vaddr + phdrs[i].memsz;
+            if (seg_end > KERNEL_VIRT_BASE) {
+                kfree(phdrs);
+                vfs_close(fd);
+                RETURN_ERRNO(THUNDEROS_EELF_NOPHDR);
+            }
             if (phdrs[i].vaddr < min_addr) {
                 min_addr = phdrs[i].vaddr;
             }
-            uint64_t seg_end = phdrs[i].vaddr + phdrs[i].memsz;
             if (seg_end > max_addr) {
                 max_addr = seg_end;
             }
@@ -299,6 +325,12 @@ int elf_exec_replace(const char *path, const char *argv[], int argc, struct trap
         RETURN_ERRNO(THUNDEROS_EELF_MAGIC);
     }
     
+    /* Verify 64-bit little-endian ELF */
+    if (ehdr.class != ELFCLASS64 || ehdr.data != ELFDATA2LSB) {
+        vfs_close(fd);
+        RETURN_ERRNO(THUNDEROS_EELF_ARCH);
+    }
+    
     /* Verify it's a RISC-V executable */
     if (ehdr.machine != EM_RISCV) {
         vfs_close(fd);
@@ -311,8 +343,14 @@ int elf_exec_replace(const char *path, const char *argv[], int argc, struct trap
         RETURN_ERRNO(THUNDEROS_EELF_TYPE);
     }
     
+    /* Validate program header entry size */
+    if (ehdr.phentsize != sizeof(elf64_phdr_t)) {
+        vfs_close(fd);
+        RETURN_ERRNO(THUNDEROS_EELF_NOPHDR);
+    }
+    
     /* Read program headers */
-    if (ehdr.phnum == 0 || ehdr.phnum > 16) {
+    if (ehdr.phnum == 0 || ehdr.phnum > ELF_MAX_PROGRAM_HEADERS) {
         vfs_close(fd);
         RETURN_ERRNO(THUNDEROS_EELF_NOPHDR);
     }
@@ -345,10 +383,22 @@ int elf_exec_replace(const char *path, const char *argv[], int argc, struct trap
     
     for (int i = 0; i < ehdr.phnum; i++) {
         if (phdrs[i].type == PT_LOAD) {
+            /* Check for vaddr + memsz overflow */
+            if (phdrs[i].memsz > 0 && phdrs[i].vaddr > UINT64_MAX - phdrs[i].memsz) {
+                kfree(phdrs);
+                vfs_close(fd);
+                RETURN_ERRNO(THUNDEROS_EELF_NOPHDR);
+            }
+            /* Reject segments targeting kernel address space */
+            uint64_t seg_end = phdrs[i].vaddr + phdrs[i].memsz;
+            if (seg_end > KERNEL_VIRT_BASE) {
+                kfree(phdrs);
+                vfs_close(fd);
+                RETURN_ERRNO(THUNDEROS_EELF_NOPHDR);
+            }
             if (phdrs[i].vaddr < min_addr) {
                 min_addr = phdrs[i].vaddr;
             }
-            uint64_t seg_end = phdrs[i].vaddr + phdrs[i].memsz;
             if (seg_end > max_addr) {
                 max_addr = seg_end;
             }
@@ -371,8 +421,8 @@ int elf_exec_replace(const char *path, const char *argv[], int argc, struct trap
         RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
     
-    /* Zero out the memory */
-    void *program_mem = (void *)program_phys;
+    /* Zero out the memory (use virtual address for kernel access) */
+    void *program_mem = (void *)translate_phys_to_virt(program_phys);
     kmemset(program_mem, 0, total_size);
     
     /* Load each PT_LOAD segment */

@@ -26,9 +26,10 @@
 /* Global device state */
 static virtio_gpu_device_t *g_gpu_device = NULL;
 
-/* DMA regions for commands/responses */
+/* DMA regions for commands/responses and framebuffer */
 static dma_region_t *g_cmd_region = NULL;
 static dma_region_t *g_resp_region = NULL;
+static dma_region_t *g_fb_region = NULL;
 
 /* Forward declarations */
 static int gpu_queue_init(virtio_gpu_device_t *dev, virtio_gpu_queue_t *vq, 
@@ -515,8 +516,8 @@ int virtio_gpu_init(uintptr_t base_addr, uint32_t irq)
     g_gpu_device->fb_size = (size_t)g_gpu_device->fb_width * g_gpu_device->fb_height * 4;
     
     /* Allocate framebuffer */
-    dma_region_t *fb_region = dma_alloc(g_gpu_device->fb_size, DMA_ZERO);
-    if (!fb_region) {
+    g_fb_region = dma_alloc(g_gpu_device->fb_size, DMA_ZERO);
+    if (!g_fb_region) {
         dma_free(g_cmd_region);
         dma_free(g_resp_region);
         GPU_WRITE32(g_gpu_device, VIRTIO_MMIO_STATUS, VIRTIO_STATUS_FAILED);
@@ -525,8 +526,8 @@ int virtio_gpu_init(uintptr_t base_addr, uint32_t irq)
         RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
     
-    g_gpu_device->fb_pixels = (uint32_t *)fb_region->virt_addr;
-    g_gpu_device->fb_phys = fb_region->phys_addr;
+    g_gpu_device->fb_pixels = (uint32_t *)g_fb_region->virt_addr;
+    g_gpu_device->fb_phys = g_fb_region->phys_addr;
     g_gpu_device->resource_id = 1;
     
     /* Create GPU resource */
@@ -581,7 +582,8 @@ int virtio_gpu_init(uintptr_t base_addr, uint32_t irq)
     return 0;
     
 fail:
-    dma_free(fb_region);
+    dma_free(g_fb_region);
+    g_fb_region = NULL;
     dma_free(g_cmd_region);
     dma_free(g_resp_region);
     g_cmd_region = NULL;
@@ -771,6 +773,10 @@ void virtio_gpu_shutdown(void)
     if (g_resp_region) {
         dma_free(g_resp_region);
         g_resp_region = NULL;
+    }
+    if (g_fb_region) {
+        dma_free(g_fb_region);
+        g_fb_region = NULL;
     }
     
     kfree(g_gpu_device);
