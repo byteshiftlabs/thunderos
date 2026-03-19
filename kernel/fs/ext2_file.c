@@ -13,8 +13,11 @@
 /**
  * Read a block from the block device
  */
-static int read_block(void *device, uint32_t block_num, void *buffer, uint32_t block_size) {
-    (void)device;  /* Device parameter unused - we use global device */
+static int read_block(ext2_fs_t *fs, uint32_t block_num, void *buffer, uint32_t block_size) {
+    if (!ext2_is_valid_block(fs, block_num)) {
+        set_errno(THUNDEROS_EFS_BADBLK);
+        return -1;
+    }
     
     /* Calculate sector number (sectors are SECTOR_SIZE bytes) */
     uint32_t sector = (block_num * block_size) / SECTOR_SIZE;
@@ -63,7 +66,13 @@ static uint32_t get_block_number(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t fi
             return 0;
         }
         
-        if (read_block(fs->device, inode->i_block[EXT2_IND_BLOCK], 
+        if (!ext2_is_valid_block(fs, inode->i_block[EXT2_IND_BLOCK])) {
+            kfree(indirect_buffer);
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
+        }
+
+        if (read_block(fs, inode->i_block[EXT2_IND_BLOCK], 
                       indirect_buffer, fs->block_size) != 0) {
             kfree(indirect_buffer);
             /* errno already set by read_block */
@@ -71,6 +80,11 @@ static uint32_t get_block_number(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t fi
         }
         
         block_num = indirect_buffer[file_block];
+        if (block_num != 0 && !ext2_is_valid_block(fs, block_num)) {
+            kfree(indirect_buffer);
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
+        }
         kfree(indirect_buffer);
         return block_num;
     }
@@ -90,7 +104,13 @@ static uint32_t get_block_number(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t fi
             return 0;
         }
         
-        if (read_block(fs->device, inode->i_block[EXT2_DIND_BLOCK], 
+        if (!ext2_is_valid_block(fs, inode->i_block[EXT2_DIND_BLOCK])) {
+            kfree(dindirect_buffer);
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
+        }
+
+        if (read_block(fs, inode->i_block[EXT2_DIND_BLOCK], 
                       dindirect_buffer, fs->block_size) != 0) {
             kfree(dindirect_buffer);
             /* errno already set by read_block */
@@ -105,6 +125,11 @@ static uint32_t get_block_number(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t fi
         if (indirect_block_num == 0) {
             return 0;
         }
+
+        if (!ext2_is_valid_block(fs, indirect_block_num)) {
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
+        }
         
         /* Read indirect block */
         indirect_buffer = (uint32_t *)kmalloc(fs->block_size);
@@ -113,7 +138,7 @@ static uint32_t get_block_number(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t fi
             return 0;
         }
         
-        if (read_block(fs->device, indirect_block_num, 
+        if (read_block(fs, indirect_block_num, 
                       indirect_buffer, fs->block_size) != 0) {
             kfree(indirect_buffer);
             /* errno already set by read_block */
@@ -123,6 +148,11 @@ static uint32_t get_block_number(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t fi
         /* Get data block number */
         uint32_t data_index = file_block % ptrs_per_block;
         block_num = indirect_buffer[data_index];
+        if (block_num != 0 && !ext2_is_valid_block(fs, block_num)) {
+            kfree(indirect_buffer);
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
+        }
         kfree(indirect_buffer);
         return block_num;
     }
@@ -171,8 +201,14 @@ int ext2_read_file(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t offset,
         uint32_t block_offset = (offset + bytes_read) % fs->block_size;
         
         /* Get the actual block number on disk */
+        clear_errno();
         uint32_t block_num = get_block_number(fs, inode, file_block);
         if (block_num == 0) {
+            if (get_errno() != THUNDEROS_OK) {
+                kfree(block_buffer);
+                return -1;
+            }
+
             /* Sparse file - zero block */
             uint32_t to_copy = fs->block_size - block_offset;
             if (to_copy > size - bytes_read) {
@@ -186,7 +222,7 @@ int ext2_read_file(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t offset,
         }
         
         /* Read the block */
-        if (read_block(fs->device, block_num, block_buffer, fs->block_size) != 0) {
+        if (read_block(fs, block_num, block_buffer, fs->block_size) != 0) {
             hal_uart_puts("ext2: Failed to read data block ");
             hal_uart_put_uint32(block_num);
             hal_uart_puts("\n");

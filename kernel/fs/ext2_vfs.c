@@ -195,19 +195,31 @@ static int ext2_vfs_readdir(vfs_node_t *directory, uint32_t entry_index, char *e
     while (buffer_offset < directory_inode->i_size) {
         ext2_dirent_t *directory_entry = (ext2_dirent_t *)(directory_buffer + buffer_offset);
         
-        /* Check for invalid entry */
-        if (directory_entry->rec_len == 0) {
-            break;
+        if (!ext2_is_valid_dirent(ext2_filesystem, directory_entry, buffer_offset, directory_inode->i_size)) {
+            kfree(directory_buffer);
+            set_errno(THUNDEROS_EFS_BADDIR);
+            return -1;
+        }
+
+        if (directory_entry->inode != 0 && directory_entry->inode > ext2_filesystem->superblock->s_inodes_count) {
+            kfree(directory_buffer);
+            set_errno(THUNDEROS_EFS_BADDIR);
+            return -1;
         }
         
         /* Count only valid entries */
         if (directory_entry->inode != 0) {
             if (current_index == entry_index) {
                 /* Found the requested entry - copy name and null-terminate */
-                for (uint32_t char_index = 0; char_index < directory_entry->name_len && char_index < EXT2_NAME_LEN; char_index++) {
+                uint32_t copy_len = directory_entry->name_len;
+                if (copy_len > EXT2_NAME_LEN) {
+                    copy_len = EXT2_NAME_LEN;
+                }
+
+                for (uint32_t char_index = 0; char_index < copy_len; char_index++) {
                     entry_name[char_index] = directory_entry->name[char_index];
                 }
-                entry_name[directory_entry->name_len] = '\0';
+                entry_name[copy_len] = '\0';
                 *entry_inode = directory_entry->inode;
                 entry_found = 1;
                 break;

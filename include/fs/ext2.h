@@ -205,6 +205,57 @@ typedef struct {
     void *device;                   /* Block device handle */
 } ext2_fs_t;
 
+static inline uint16_t ext2_dirent_required_len(uint8_t name_len) {
+    uint16_t required_len = (uint16_t)(8 + name_len);
+    return (uint16_t)((required_len + 3) & ~3U);
+}
+
+static inline int ext2_is_valid_block(ext2_fs_t *fs, uint32_t block_num) {
+    return fs && fs->superblock &&
+           block_num >= fs->superblock->s_first_data_block &&
+           block_num < fs->superblock->s_blocks_count;
+}
+
+static inline int ext2_is_valid_block_range(ext2_fs_t *fs, uint32_t start_block,
+                                            uint32_t block_count) {
+    if (!fs || !fs->superblock || block_count == 0) {
+        return 0;
+    }
+
+    if (!ext2_is_valid_block(fs, start_block)) {
+        return 0;
+    }
+
+    return block_count <= fs->superblock->s_blocks_count - start_block;
+}
+
+static inline int ext2_is_valid_dirent(ext2_fs_t *fs, ext2_dirent_t *entry,
+                                       uint32_t offset, uint32_t dir_size) {
+    (void)fs;
+
+    if (!entry) {
+        return 0;
+    }
+
+    if (entry->rec_len < 8 || (entry->rec_len & 3U) != 0) {
+        return 0;
+    }
+
+    if (entry->name_len > EXT2_NAME_LEN) {
+        return 0;
+    }
+
+    if (entry->rec_len < ext2_dirent_required_len(entry->name_len)) {
+        return 0;
+    }
+
+    if (offset > dir_size || entry->rec_len > dir_size - offset) {
+        return 0;
+    }
+
+    return 1;
+}
+
 /* Function declarations */
 
 /**
