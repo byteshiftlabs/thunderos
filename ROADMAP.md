@@ -421,7 +421,7 @@ Initial attempt at VirtIO block driver revealed fundamental gaps in memory infra
 
 ## Version 0.9.0 - "Synchronization" ✅ RELEASED
 
-**Status:** Released on December 10, 2025
+**Status:** Released on December 4, 2025
 
 **Focus:** Blocking I/O and synchronization primitives
 
