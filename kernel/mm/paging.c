@@ -25,6 +25,7 @@ static int paging_enabled = 0;
 static page_table_t *alloc_page_table(void) {
     uintptr_t page = pmm_alloc_page();
     if (page == 0) {
+        set_errno(THUNDEROS_ENOMEM);
         return NULL;
     }
     
@@ -400,6 +401,7 @@ page_table_t *create_user_page_table(void) {
     // Allocate a new page table structure from physical memory
     page_table_t *user_pt = alloc_page_table();
     if (user_pt == NULL) {
+        /* errno already set by alloc_page_table */
         return NULL;
     }
     
@@ -449,6 +451,8 @@ page_table_t *create_user_page_table(void) {
         free_page_table(user_pt);
         return NULL;
     }
+
+    clear_errno();
     
     return user_pt;
 }
