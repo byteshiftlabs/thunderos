@@ -84,8 +84,15 @@ uint32_t ext2_alloc_block(ext2_fs_t *fs, uint32_t group) {
     }
     
     /* Find first free block */
+    uint32_t first_data_block = fs->superblock->s_first_data_block;
+    uint32_t total_blocks = fs->superblock->s_blocks_count;
     uint32_t blocks_per_group = fs->superblock->s_blocks_per_group;
     for (uint32_t i = 0; i < blocks_per_group; i++) {
+        uint32_t block_num = first_data_block + group * blocks_per_group + i;
+        if (block_num >= total_blocks) {
+            break;
+        }
+
         uint32_t byte = i / BITS_PER_BYTE;
         uint32_t bit = i % BITS_PER_BYTE;
         
@@ -108,7 +115,7 @@ uint32_t ext2_alloc_block(ext2_fs_t *fs, uint32_t group) {
             
             kfree(bitmap);
             clear_errno();
-            return group * blocks_per_group + i;
+            return block_num;
         }
     }
     
@@ -124,14 +131,20 @@ int ext2_free_block(ext2_fs_t *fs, uint32_t block_num) {
     if (!fs || block_num == 0) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
+
+    uint32_t first_data_block = fs->superblock->s_first_data_block;
+    if (block_num < first_data_block || block_num >= fs->superblock->s_blocks_count) {
+        RETURN_ERRNO(THUNDEROS_EFS_BADBLK);
+    }
     
     /* Determine which group contains this block */
     uint32_t blocks_per_group = fs->superblock->s_blocks_per_group;
-    uint32_t group = block_num / blocks_per_group;
-    uint32_t offset = block_num % blocks_per_group;
+    uint32_t block_index = block_num - first_data_block;
+    uint32_t group = block_index / blocks_per_group;
+    uint32_t offset = block_index % blocks_per_group;
     
     if (group >= fs->num_groups) {
-        RETURN_ERRNO(THUNDEROS_EINVAL);
+        RETURN_ERRNO(THUNDEROS_EFS_BADBLK);
     }
     
     ext2_group_desc_t *gd = &fs->group_desc[group];
