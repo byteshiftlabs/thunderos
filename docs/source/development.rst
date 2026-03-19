@@ -95,7 +95,7 @@ Manual Testing
    make test                          # Run full test suite
    tests/scripts/test_boot.sh         # Boot and unit tests
    tests/scripts/test_integration.sh  # VirtIO, ext2, shell tests
-   tests/scripts/test_user_mode.sh    # User-space program tests
+   tests/scripts/test_kernel.sh       # Comprehensive kernel test suite
 
 **Manual Steps**
 
@@ -118,7 +118,7 @@ The CI pipeline:
    
    - ``test_boot.sh`` - Kernel boot and unit tests
    - ``test_integration.sh`` - VirtIO, ext2, shell functionality
-   - ``test_user_mode.sh`` - User-mode programs and syscalls
+   - ``test_kernel.sh`` - Comprehensive kernel validation
 
 4. Verifies boot messages and initialization
 5. Checks for build warnings
