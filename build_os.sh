@@ -68,6 +68,9 @@ main() {
     
     echo ""
     echo "Build complete! Run with:"
+    echo "  ./run_os.sh"
+    echo ""
+    echo "Or manually with QEMU:"
     echo "  qemu-system-riscv64 -M virt -m 128M -nographic -serial mon:stdio \\"
     echo "    -bios none -kernel ${KERNEL_ELF} \\"
     echo "    -drive file=${FS_IMG},if=none,format=raw,id=hd0 \\"
