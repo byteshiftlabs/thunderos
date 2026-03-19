@@ -71,12 +71,10 @@ void wait_queue_sleep(wait_queue_t *wq) {
     // Remove from scheduler ready queue (if present)
     scheduler_dequeue(current);
     
-    // Re-enable interrupts and yield to scheduler
+    // Yield CPU while interrupts stay ordered with the blocked state.
+    process_block_current();
+
     interrupt_restore(old_state);
-    
-    // Yield CPU - scheduler will pick another process
-    // When we're woken up, schedule() will return here
-    schedule();
     
     // We've been woken up - the entry was freed by wake function
 }

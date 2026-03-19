@@ -240,6 +240,14 @@ void process_sleep(uint64_t ticks);
 void process_wakeup(struct process *proc);
 
 /**
+ * Block the current process until another path wakes it.
+ * 
+ * Assumes the caller has already set the current process to a non-running
+ * blocked state such as PROC_SLEEPING.
+ */
+void process_block_current(void);
+
+/**
  * Allocate a new PID
  * 
  * @return New PID, or -1 on failure

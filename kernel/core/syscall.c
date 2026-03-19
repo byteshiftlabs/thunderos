@@ -186,8 +186,10 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
         
         // Child exists but hasn't exited/stopped yet - sleep and try again
         current->state = PROC_SLEEPING;
-        scheduler_yield();
-        current->state = PROC_RUNNING;
+        process_block_current();
+        if (current->state == PROC_READY) {
+            current->state = PROC_RUNNING;
+        }
     }
 }
 
