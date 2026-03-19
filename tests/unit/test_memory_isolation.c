@@ -12,6 +12,7 @@
 #ifdef ENABLE_KERNEL_TESTS
 
 #include "kernel/process.h"
+#include "kernel/errno.h"
 #include "mm/paging.h"
 #include "mm/pmm.h"
 #include "mm/kmalloc.h"
@@ -411,6 +412,35 @@ static void test_add_vma(void) {
     TEST_PASS();
 }
 
+    /**
+     * Test 13b: process_add_vma keeps VMAs sorted and rejects overlaps
+     */
+    static void test_add_vma_orders_and_rejects_overlap(void) {
+        TEST_START("process_add_vma sorts VMAs and rejects overlap");
+
+        struct process *proc = create_test_process_struct("test_proc12b");
+        ASSERT(proc != NULL, "Process creation failed");
+
+        ASSERT(process_add_vma(proc, 0x30000, 0x34000, VM_READ | VM_USER) == 0,
+            "Failed to add high VMA");
+        ASSERT(process_add_vma(proc, 0x10000, 0x14000, VM_READ | VM_USER) == 0,
+            "Failed to add low VMA");
+
+        ASSERT(proc->vm_areas != NULL, "VMA list should not be empty");
+        ASSERT(proc->vm_areas->start == 0x10000, "Lowest VMA should be first in list");
+        ASSERT(proc->vm_areas->next != NULL, "Second VMA missing from list");
+        ASSERT(proc->vm_areas->next->start == 0x30000, "Higher VMA should follow lower VMA");
+
+        clear_errno();
+        ASSERT(process_add_vma(proc, 0x12000, 0x16000, VM_READ | VM_USER) == -1,
+            "Overlapping VMA should be rejected");
+        ASSERT(get_errno() == THUNDEROS_EEXIST, "Overlapping VMA should set EEXIST");
+
+        cleanup_test_process(proc);
+
+        TEST_PASS();
+    }
+
 /**
  * Test 13: process_remove_vma removes VMA
  */
@@ -471,6 +501,30 @@ static void test_cross_process_isolation(void) {
     TEST_PASS();
 }
 
+    /**
+     * Test 14b: process_validate_user_ptr accepts contiguous adjacent VMAs
+     */
+    static void test_validate_user_ptr_spans_adjacent_vmas(void) {
+        TEST_START("process_validate_user_ptr spans adjacent VMAs");
+
+        struct process *proc = create_test_process_struct("test_proc14c");
+        ASSERT(proc != NULL, "Process creation failed");
+
+        ASSERT(process_add_vma(proc, 0x60000, 0x61000, VM_READ | VM_USER) == 0,
+            "Failed to add first adjacent VMA");
+        ASSERT(process_add_vma(proc, 0x61000, 0x62000, VM_READ | VM_USER) == 0,
+            "Failed to add second adjacent VMA");
+
+        ASSERT(process_validate_user_ptr(proc, (void *)0x60ff0, 32, VM_READ) == 1,
+            "Adjacent VMAs should validate as a continuous readable range");
+        ASSERT(process_validate_user_ptr(proc, (void *)0x60ff0, 32, VM_WRITE) == 0,
+            "Adjacent VMAs without write permission should still reject writes");
+
+        cleanup_test_process(proc);
+
+        TEST_PASS();
+    }
+
 /**
  * Test 15: Heap boundaries enforce safety margins
  */
@@ -518,8 +572,10 @@ void run_memory_isolation_tests(void) {
     test_vma_cleanup();
     test_processes_have_different_page_tables();
     test_add_vma();
+    test_add_vma_orders_and_rejects_overlap();
     test_remove_vma();
     test_cross_process_isolation();
+    test_validate_user_ptr_spans_adjacent_vmas();
     test_heap_safety_margins();
     
     // Print summary
