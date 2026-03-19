@@ -12,6 +12,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include <mm/dma.h>
 
 /* VirtIO MMIO Register Offsets (from base address) */
 #define VIRTIO_MMIO_MAGIC_VALUE         0x000  // Magic value ('virt')
@@ -172,6 +173,11 @@ typedef struct {
 typedef struct {
     uint32_t queue_size;        // Number of descriptors
     uint16_t last_seen_used;    // Last used index we've seen
+
+    // DMA allocation handles for queue cleanup/reset paths
+    dma_region_t *desc_region;
+    dma_region_t *avail_region;
+    dma_region_t *used_region;
     
     // DMA-allocated rings
     virtq_desc_t *desc;         // Descriptor ring

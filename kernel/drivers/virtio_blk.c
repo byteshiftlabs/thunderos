@@ -33,6 +33,7 @@ static void virtqueue_free_desc_chain(virtqueue_t *vq, uint16_t desc_idx);
 static void virtqueue_add_to_avail(virtqueue_t *vq, uint16_t desc_idx);
 static int virtqueue_get_used_buf(virtqueue_t *vq, uint16_t *desc_idx, uint32_t *len);
 static void virtqueue_notify(virtio_blk_device_t *dev, uint32_t queue_idx);
+static void virtqueue_cleanup(virtqueue_t *vq);
 static void virtqueue_reset_state(virtqueue_t *vq);
 static int virtio_blk_recover_queue(virtio_blk_device_t *dev);
 
@@ -43,6 +44,9 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
 {
     virtqueue_t *vq = &dev->queue;
     vq->queue_size = queue_size;
+    vq->desc_region = NULL;
+    vq->avail_region = NULL;
+    vq->used_region = NULL;
     
     /* Calculate sizes for each ring */
     size_t desc_size = sizeof(virtq_desc_t) * queue_size;
@@ -54,25 +58,27 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
     if (!desc_region) {
         RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
+    vq->desc_region = desc_region;
     vq->desc = (virtq_desc_t *)desc_region->virt_addr;
     vq->desc_phys = desc_region->phys_addr;
     
     /* Allocate available ring */
     dma_region_t *avail_region = dma_alloc(avail_size, DMA_ZERO);
     if (!avail_region) {
-        dma_free(desc_region);
+        virtqueue_cleanup(vq);
         RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
+    vq->avail_region = avail_region;
     vq->avail = (virtq_avail_t *)avail_region->virt_addr;
     vq->avail_phys = avail_region->phys_addr;
     
     /* Allocate used ring */
     dma_region_t *used_region = dma_alloc(used_size, DMA_ZERO);
     if (!used_region) {
-        dma_free(desc_region);
-        dma_free(avail_region);
+        virtqueue_cleanup(vq);
         RETURN_ERRNO(THUNDEROS_ENOMEM);
     }
+    vq->used_region = used_region;
     vq->used = (virtq_used_t *)used_region->virt_addr;
     vq->used_phys = used_region->phys_addr;
     
@@ -99,6 +105,36 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
     
     clear_errno();
     return 0;
+}
+
+/**
+ * Free virtqueue DMA allocations and clear queue state.
+ */
+static void virtqueue_cleanup(virtqueue_t *vq)
+{
+    if (vq->used_region) {
+        dma_free(vq->used_region);
+        vq->used_region = NULL;
+    }
+    if (vq->avail_region) {
+        dma_free(vq->avail_region);
+        vq->avail_region = NULL;
+    }
+    if (vq->desc_region) {
+        dma_free(vq->desc_region);
+        vq->desc_region = NULL;
+    }
+
+    vq->desc = NULL;
+    vq->avail = NULL;
+    vq->used = NULL;
+    vq->desc_phys = 0;
+    vq->avail_phys = 0;
+    vq->used_phys = 0;
+    vq->free_head = 0;
+    vq->num_free = 0;
+    vq->last_seen_used = 0;
+    vq->queue_size = 0;
 }
 
 /**
@@ -466,6 +502,7 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
     
     /* Initialize virtqueue */
     if (virtqueue_init(g_blk_device, queue_size) < 0) {
+        virtqueue_cleanup(&g_blk_device->queue);
         kfree(g_blk_device);
         g_blk_device = NULL;
         /* errno already set by virtqueue_init */
@@ -479,6 +516,7 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
     /* Verify device accepted DRIVER_OK */
     uint32_t final_status = VIRTIO_READ32(g_blk_device, VIRTIO_MMIO_STATUS);
     if (!(final_status & VIRTIO_STATUS_DRIVER_OK)) {
+        virtqueue_cleanup(&g_blk_device->queue);
         kfree(g_blk_device);
         g_blk_device = NULL;
         RETURN_ERRNO(THUNDEROS_EVIRTIO_BADDEV);
