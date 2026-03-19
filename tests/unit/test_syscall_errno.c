@@ -124,6 +124,68 @@ static void test_execve_invalid_pointer_sets_efault(void) {
     TEST_PASS();
 }
 
+static void test_waitpid_invalid_status_pointer_sets_efault(void) {
+    TEST_START("sys_waitpid reports EFAULT for invalid status pointer");
+
+    clear_errno();
+    ASSERT_TRUE(sys_waitpid(-1, (int *)USER_CODE_BASE, 0) == (uint64_t)-1,
+                "sys_waitpid should fail for invalid status pointer");
+    ASSERT_TRUE(get_errno() == THUNDEROS_EFAULT,
+                "sys_waitpid should set EFAULT before child-state checks");
+
+    TEST_PASS();
+}
+
+static void test_getpid_clears_errno(void) {
+    TEST_START("sys_getpid clears stale errno on success");
+
+    set_errno(THUNDEROS_EIO);
+    ASSERT_TRUE(sys_getpid() == 0, "sys_getpid should return init pid");
+    ASSERT_TRUE(get_errno() == THUNDEROS_OK, "errno should be cleared on success");
+
+    TEST_PASS();
+}
+
+static void test_sbrk_zero_clears_errno(void) {
+    TEST_START("sys_sbrk clears stale errno on zero increment");
+
+    set_errno(THUNDEROS_EIO);
+    (void)sys_sbrk(0);
+    ASSERT_TRUE(get_errno() == THUNDEROS_OK, "errno should be cleared on success");
+
+    TEST_PASS();
+}
+
+static void test_sleep_zero_clears_errno(void) {
+    TEST_START("sys_sleep clears stale errno on zero-duration success");
+
+    set_errno(THUNDEROS_EIO);
+    ASSERT_TRUE(sys_sleep(0) == 0, "sys_sleep should succeed for zero duration");
+    ASSERT_TRUE(get_errno() == THUNDEROS_OK, "errno should be cleared on success");
+
+    TEST_PASS();
+}
+
+static void test_yield_clears_errno(void) {
+    TEST_START("sys_yield clears stale errno on success");
+
+    set_errno(THUNDEROS_EIO);
+    ASSERT_TRUE(sys_yield() == 0, "sys_yield should succeed");
+    ASSERT_TRUE(get_errno() == THUNDEROS_OK, "errno should be cleared on success");
+
+    TEST_PASS();
+}
+
+static void test_gettime_clears_errno(void) {
+    TEST_START("sys_gettime clears stale errno on success");
+
+    set_errno(THUNDEROS_EIO);
+    (void)sys_gettime();
+    ASSERT_TRUE(get_errno() == THUNDEROS_OK, "errno should be cleared on success");
+
+    TEST_PASS();
+}
+
 void run_syscall_errno_tests(void) {
     struct process *saved_process = process_current();
 
@@ -144,6 +206,12 @@ void run_syscall_errno_tests(void) {
     test_getdents_invalid_pointer_sets_efault();
     test_chdir_invalid_pointer_sets_efault();
     test_execve_invalid_pointer_sets_efault();
+    test_waitpid_invalid_status_pointer_sets_efault();
+    test_getpid_clears_errno();
+    test_sbrk_zero_clears_errno();
+    test_sleep_zero_clears_errno();
+    test_yield_clears_errno();
+    test_gettime_clears_errno();
 
     process_set_current(saved_process);
 
