@@ -724,8 +724,8 @@ int vfs_seek(int fd, int offset, int whence) {
         /* errno already set by vfs_get_file */
         return -1;
     }
-    
-    uint32_t new_pos;
+
+    int64_t new_pos;
     
     switch (whence) {
         case SEEK_SET:
@@ -733,21 +733,25 @@ int vfs_seek(int fd, int offset, int whence) {
             break;
             
         case SEEK_CUR:
-            new_pos = file->pos + offset;
+            new_pos = (int64_t)file->pos + offset;
             break;
             
         case SEEK_END:
-            new_pos = file->node->size + offset;
+            new_pos = (int64_t)file->node->size + offset;
             break;
             
         default:
             hal_uart_puts("vfs: Invalid whence value\n");
             RETURN_ERRNO(THUNDEROS_EINVAL);
     }
+
+    if (new_pos < 0) {
+        RETURN_ERRNO(THUNDEROS_EINVAL);
+    }
     
-    file->pos = new_pos;
+    file->pos = (uint32_t)new_pos;
     clear_errno();
-    return new_pos;
+    return (int)new_pos;
 }
 
 /**

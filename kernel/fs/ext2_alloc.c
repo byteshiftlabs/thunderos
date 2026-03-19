@@ -256,6 +256,10 @@ int ext2_free_inode(ext2_fs_t *fs, uint32_t inode_num) {
     if (!fs || inode_num == 0) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
+
+    if (inode_num > fs->superblock->s_inodes_count) {
+        RETURN_ERRNO(THUNDEROS_EFS_BADINO);
+    }
     
     /* Inodes are 1-indexed */
     uint32_t inode_index = inode_num - 1;
@@ -266,7 +270,7 @@ int ext2_free_inode(ext2_fs_t *fs, uint32_t inode_num) {
     uint32_t offset = inode_index % inodes_per_group;
     
     if (group >= fs->num_groups) {
-        RETURN_ERRNO(THUNDEROS_EINVAL);
+        RETURN_ERRNO(THUNDEROS_EFS_BADINO);
     }
     
     ext2_group_desc_t *gd = &fs->group_desc[group];

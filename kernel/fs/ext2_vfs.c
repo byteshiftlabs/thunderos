@@ -105,7 +105,7 @@ static vfs_node_t *ext2_vfs_lookup(vfs_node_t *dir, const char *name) {
     /* Lookup inode number */
     uint32_t inode_num = ext2_lookup(ext2_fs, dir_inode, name);
     if (inode_num == 0) {
-        if (errno == 0) {
+        if (get_errno() == THUNDEROS_OK) {
             set_errno(THUNDEROS_ENOENT);
         }
         return NULL;
@@ -144,7 +144,8 @@ static vfs_node_t *ext2_vfs_lookup(vfs_node_t *dir, const char *name) {
     node->fs = dir->fs;
     node->fs_data = inode;
     node->ops = &ext2_vfs_ops;
-    
+
+    clear_errno();
     return node;
 }
 

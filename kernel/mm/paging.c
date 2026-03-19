@@ -10,6 +10,7 @@
 #include "kernel/errno.h"
 #include "kernel/constants.h"
 #include "arch/sbi.h"
+#include "arch/plic.h"
 
 // Kernel root page table (allocated statically for bootstrap)
 static page_table_t kernel_page_table __attribute__((aligned(PAGE_SIZE)));
@@ -279,6 +280,17 @@ void paging_init(uintptr_t kernel_start, uintptr_t kernel_end) {
         hal_uart_puts("Failed to map CLINT\n");
         return;
     }
+
+    // Map PLIC MMIO region used for external interrupt control
+    hal_uart_puts("Mapping PLIC MMIO\n");
+    for (uintptr_t plic_addr = PLIC_BASE & ~(PAGE_SIZE - 1);
+         plic_addr <= ((PLIC_BASE + PLIC_CLAIM_OFFSET) & ~(PAGE_SIZE - 1));
+         plic_addr += PAGE_SIZE) {
+        if (map_page(&kernel_page_table, plic_addr, plic_addr, PTE_KERNEL_DATA) != 0) {
+            hal_uart_puts("Failed to map PLIC\n");
+            return;
+        }
+    }
     
     // Map QEMU test device (QEMU_TEST_DEVICE_ADDR)
     hal_uart_puts("Mapping QEMU test device\n");
@@ -416,6 +428,16 @@ page_table_t *create_user_page_table(void) {
     // Kernel needs this during syscalls that access filesystem and graphics
     for (uintptr_t addr = QEMU_VIRTIO_BASE; addr <= QEMU_VIRTIO_END; addr += QEMU_VIRTIO_STRIDE) {
         if (map_page(user_pt, addr, addr, PTE_KERNEL_DATA) != 0) {
+            free_page_table(user_pt);
+            return NULL;
+        }
+    }
+
+    // Map PLIC MMIO so supervisor trap handling can service external IRQs
+    for (uintptr_t plic_addr = PLIC_BASE & ~(PAGE_SIZE - 1);
+         plic_addr <= ((PLIC_BASE + PLIC_CLAIM_OFFSET) & ~(PAGE_SIZE - 1));
+         plic_addr += PAGE_SIZE) {
+        if (map_page(user_pt, plic_addr, plic_addr, PTE_KERNEL_DATA) != 0) {
             free_page_table(user_pt);
             return NULL;
         }
