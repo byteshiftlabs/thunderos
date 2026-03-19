@@ -135,8 +135,7 @@ jobs:
         path: |
           qemu_output.log
           build_warnings.log
-          tests/outputs/boot_test_output.txt
-          tests/outputs/integration_test_output.txt
+          tests/outputs/test_results.log
         retention-days: 7
     
     - name: Report success
