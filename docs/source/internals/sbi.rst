@@ -423,8 +423,8 @@ Files
 * ``kernel/arch/riscv64/drivers/sbi.c`` - SBI implementation
 * ``kernel/mm/paging.c`` - QEMU test device mapping
 * ``kernel/core/syscall.c`` - Syscall handlers (SYS_POWEROFF, SYS_REBOOT)
-* ``userland/system/poweroff.c`` - Poweroff command
-* ``userland/system/reboot.c`` - Reboot command
+* ``external/userland/system/poweroff.c`` - Poweroff command
+* ``external/userland/system/reboot.c`` - Reboot command
 
 See Also
 --------

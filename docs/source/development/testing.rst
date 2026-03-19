@@ -261,11 +261,11 @@ User-Space Testing
 Testing User Programs
 ~~~~~~~~~~~~~~~~~~~~~
 
-ThunderOS can execute ELF binaries from the ext2 filesystem. User programs are in ``userland/``:
+ThunderOS can execute ELF binaries from the ext2 filesystem. User programs are in ``external/userland/``:
 
 .. code-block:: text
 
-   userland/
+   external/userland/
    ├── cat.c           # File concatenation utility
    ├── ls.c            # Directory listing
    ├── hello.c         # Hello world demo

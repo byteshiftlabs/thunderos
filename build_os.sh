@@ -48,8 +48,8 @@ main() {
         
         # Copy userland binaries if they exist
         for prog in cat ls hello clock pwd mkdir rmdir touch rm clear sleep ush ps uname uptime whoami tty kill poweroff reboot; do
-            if [[ -f "userland/build/${prog}" ]]; then
-                cp "userland/build/${prog}" build/testfs/bin/
+            if [[ -f "external/userland/build/${prog}" ]]; then
+                cp "external/userland/build/${prog}" build/testfs/bin/
                 echo "  Added /bin/${prog}"
             fi
         done

@@ -15,7 +15,7 @@ EOF
 echo "[" > compile_commands.json
 first=true
 
-for file in $(find kernel userland tests -name "*.c" -type f | sort); do
+for file in $(find kernel external/userland tests -name "*.c" -type f | sort); do
     if [ "$first" = false ]; then
         echo "," >> compile_commands.json
     fi
@@ -45,7 +45,7 @@ echo "Running clang-tidy analysis..."
 echo ""
 
 # Run clang-tidy on all files
-find kernel userland tests -name "*.c" -type f | sort | xargs clang-tidy --header-filter=".*" 2>&1 | tee clang_tidy_analysis.txt
+find kernel external/userland tests -name "*.c" -type f | sort | xargs clang-tidy --header-filter=".*" 2>&1 | tee clang_tidy_analysis.txt
 
 # Extract summary
 echo ""

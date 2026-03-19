@@ -541,7 +541,7 @@ Testing
 Signal Test Program
 ~~~~~~~~~~~~~~~~~~~
 
-``userland/signal_test.c`` validates signal functionality:
+``external/userland/tests/signal_test.c`` validates signal functionality:
 
 **Tests:**
 
@@ -595,7 +595,7 @@ Implementation Files
 
 **Test:**
 
-- ``userland/signal_test.c`` - User-space signal test program
+- ``external/userland/tests/signal_test.c`` - User-space signal test program
 
 Future Enhancements
 -------------------
