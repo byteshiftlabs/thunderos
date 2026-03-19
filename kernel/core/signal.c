@@ -182,15 +182,24 @@ void signal_default_ignore(struct process *proc) {
  * 
  * @param proc Process to stop
  */
-void signal_default_stop(struct process *proc) {
+void signal_default_stop(struct process *proc, int signum) {
     if (!proc) return;
+
+    if (signum <= 0 || signum >= NSIG) {
+        signum = SIGSTOP;
+    }
+
+    extern void scheduler_dequeue(struct process *proc);
     
     // Change state to STOPPED
     proc->state = PROC_STOPPED;
+
+    // Stopped processes must not remain runnable.
+    scheduler_dequeue(proc);
     
     // Store exit status with stop signal info (for waitpid)
     // Upper byte = signal number, lower byte = WAIT_STOPPED_INDICATOR
-    proc->exit_code = (SIGTSTP << 8) | WAIT_STOPPED_INDICATOR;
+    proc->exit_code = (signum << 8) | WAIT_STOPPED_INDICATOR;
     
     // Notify parent with SIGCHLD so it can detect the stop
     if (proc->parent) {
@@ -261,7 +270,7 @@ void signal_handle(struct process *proc, int signum) {
             case SIGTSTP:
             case SIGTTIN:
             case SIGTTOU:
-                signal_default_stop(proc);
+                signal_default_stop(proc, signum);
                 break;
                 
             case SIGCONT:
@@ -325,7 +334,7 @@ void signal_handle_with_frame(struct process *proc, int signum, struct trap_fram
             case SIGTSTP:
             case SIGTTIN:
             case SIGTTOU:
-                signal_default_stop(proc);
+                signal_default_stop(proc, signum);
                 break;
                 
             case SIGCONT:

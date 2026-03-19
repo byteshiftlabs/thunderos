@@ -155,19 +155,23 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
         child = process_find_stopped_child(current, pid);
         
         if (child) {
+            if (child->exit_code == 0) {
+                child = NULL;
+            } else {
             // Found stopped child - report it but don't reap
-            pid_t child_pid = child->pid;
+                pid_t child_pid = child->pid;
             
             // Store stop status if requested (signal << 8 | 0x7f)
-            if (wstatus) {
-                *wstatus = child->exit_code;  // Already set by signal_default_stop
-            }
+                if (wstatus) {
+                    *wstatus = child->exit_code;  // Already set by signal_default_stop
+                }
             
             // Clear the stopped status so we don't report it again
             // (Process stays stopped until SIGCONT)
-            child->exit_code = 0;
+                child->exit_code = 0;
             
-            return child_pid;
+                return child_pid;
+            }
         }
         
         // Check if parent has any children at all
