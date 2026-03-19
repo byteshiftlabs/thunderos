@@ -30,7 +30,7 @@ static virtio_blk_device_t *g_blk_device = NULL;
 /* Forward declarations */
 static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size);
 static int virtqueue_alloc_desc_chain(virtqueue_t *vq, uint16_t *desc_idx, uint32_t count);
-static void virtqueue_free_desc_chain(virtqueue_t *vq, uint16_t desc_idx);
+static int virtqueue_free_desc_chain(virtqueue_t *vq, uint16_t desc_idx);
 static void virtqueue_add_to_avail(virtqueue_t *vq, uint16_t desc_idx);
 static int virtqueue_get_used_buf(virtqueue_t *vq, uint16_t *desc_idx, uint32_t *len);
 static void virtqueue_notify(virtio_blk_device_t *dev, uint32_t queue_idx);
@@ -227,12 +227,19 @@ static int virtqueue_alloc_desc_chain(virtqueue_t *vq, uint16_t *desc_idx, uint3
     if (vq->num_free < count) {
         RETURN_ERRNO(THUNDEROS_EBUSY);
     }
+
+    if (vq->free_head >= vq->queue_size) {
+        RETURN_ERRNO(THUNDEROS_EIO);
+    }
     
     *desc_idx = vq->free_head;
     uint16_t current = vq->free_head;
     
     /* Advance free_head by 'count' descriptors */
     for (uint32_t i = 0; i < count; i++) {
+        if (current >= vq->queue_size) {
+            RETURN_ERRNO(THUNDEROS_EIO);
+        }
         current = vq->desc[current].next;
     }
     vq->free_head = current;
@@ -245,13 +252,20 @@ static int virtqueue_alloc_desc_chain(virtqueue_t *vq, uint16_t *desc_idx, uint3
 /**
  * Free a descriptor chain back to the free list
  */
-static void virtqueue_free_desc_chain(virtqueue_t *vq, uint16_t desc_idx)
+static int virtqueue_free_desc_chain(virtqueue_t *vq, uint16_t desc_idx)
 {
+    if (desc_idx >= vq->queue_size) {
+        RETURN_ERRNO(THUNDEROS_EIO);
+    }
+
     /* Count descriptors in chain */
     uint16_t count = 1;
     uint16_t current = desc_idx;
     while (vq->desc[current].flags & VIRTQ_DESC_F_NEXT) {
         current = vq->desc[current].next;
+        if (current >= vq->queue_size) {
+            RETURN_ERRNO(THUNDEROS_EIO);
+        }
         count++;
     }
     
@@ -259,6 +273,9 @@ static void virtqueue_free_desc_chain(virtqueue_t *vq, uint16_t desc_idx)
     vq->desc[current].next = vq->free_head;
     vq->free_head = desc_idx;
     vq->num_free += count;
+
+    clear_errno();
+    return 0;
 }
 
 /**
@@ -290,8 +307,13 @@ static int virtqueue_get_used_buf(virtqueue_t *vq, uint16_t *desc_idx, uint32_t 
     uint16_t used_idx = vq->last_seen_used % vq->queue_size;
     *desc_idx = vq->used->ring[used_idx].id;
     *len = vq->used->ring[used_idx].len;
+
+    if (*desc_idx >= vq->queue_size) {
+        RETURN_ERRNO(THUNDEROS_EIO);
+    }
     
     vq->last_seen_used++;
+    clear_errno();
     return 0;
 }
 
@@ -342,7 +364,9 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
     }
     
     if (header_phys == 0 || status_phys == 0 || (desc_count == 3 && data_phys == 0)) {
-        virtqueue_free_desc_chain(vq, desc_idx);
+        if (virtqueue_free_desc_chain(vq, desc_idx) < 0) {
+            return -1;
+        }
         RETURN_ERRNO(THUNDEROS_EIO);
     }
     
@@ -400,7 +424,9 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
         uint16_t used_idx;
         uint32_t len;
         if (virtqueue_get_used_buf(vq, &used_idx, &len) == 0) {
-            virtqueue_free_desc_chain(vq, used_idx);
+            if (virtqueue_free_desc_chain(vq, used_idx) < 0) {
+                return -1;
+            }
             
             if (req->status != VIRTIO_BLK_S_OK) {
                 RETURN_ERRNO(THUNDEROS_EIO);
