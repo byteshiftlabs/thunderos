@@ -62,8 +62,8 @@ Compilation
 
 .. code-block:: bash
 
-   ./build_os.sh       # Clean build of the kernel
-   ./test_qemu.sh      # Build and run in QEMU
+   ./build_os.sh --clean  # Clean build of the kernel
+   ./run_os.sh            # Build and run in QEMU
    ./build_docs.sh     # Build Sphinx documentation
 
 **Using Make Directly**
