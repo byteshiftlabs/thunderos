@@ -225,6 +225,7 @@ void signal_default_cont(struct process *proc) {
     
     // If process was stopped, wake it up
     if (proc->state == PROC_STOPPED) {
+        proc->exit_code = 0;
         extern void process_wakeup(struct process *p);
         process_wakeup(proc);
     }
