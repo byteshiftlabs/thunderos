@@ -12,8 +12,21 @@ readonly KERNEL_ELF="build/thunderos.elf"
 readonly FS_IMG="build/fs.img"
 readonly FS_SIZE="10M"
 
+require_command() {
+    local command_name="$1"
+    local install_hint="$2"
+
+    if ! command -v "$command_name" >/dev/null 2>&1; then
+        echo "✗ Required command not found: ${command_name}" >&2
+        echo "  ${install_hint}" >&2
+        exit 1
+    fi
+}
+
 main() {
     echo "Building ThunderOS kernel..."
+
+    require_command mkfs.ext2 "Install e2fsprogs: sudo apt-get install e2fsprogs"
     
     make clean
     make all
@@ -44,7 +57,7 @@ main() {
     if [[ -f "build_userland.sh" ]]; then
         echo "Building userland programs..."
         chmod +x build_userland.sh
-        ./build_userland.sh 2>/dev/null || echo "⚠ Userland build skipped"
+        ./build_userland.sh
         
         # Copy userland binaries if they exist
         for prog in cat ls hello clock pwd mkdir rmdir touch rm clear sleep ush ps uname uptime whoami tty kill poweroff reboot; do
@@ -53,18 +66,22 @@ main() {
                 echo "  Added /bin/${prog}"
             fi
         done
+    else
+        echo "✗ build_userland.sh not found" >&2
+        exit 1
     fi
     
     # Create ext2 filesystem
-    if command -v mkfs.ext2 &> /dev/null; then
-        mkfs.ext2 -F -q -d build/testfs "${FS_IMG}" "${FS_SIZE}"
-        rm -rf build/testfs
-        echo "✓ Filesystem created: ${FS_IMG}"
-        echo "  Size: $(du -h "${FS_IMG}" | cut -f1)"
-    else
-        echo "⚠ mkfs.ext2 not found, skipping filesystem creation"
-        echo "  Install e2fsprogs: sudo apt-get install e2fsprogs"
+    mkfs.ext2 -F -q -d build/testfs "${FS_IMG}" "${FS_SIZE}"
+    rm -rf build/testfs
+
+    if [[ ! -f "${FS_IMG}" ]]; then
+        echo "✗ Filesystem image was not created" >&2
+        exit 1
     fi
+
+    echo "✓ Filesystem created: ${FS_IMG}"
+    echo "  Size: $(du -h "${FS_IMG}" | cut -f1)"
     
     echo ""
     echo "Build complete! Run with:"
