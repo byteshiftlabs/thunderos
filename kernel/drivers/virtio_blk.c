@@ -12,6 +12,7 @@
 #include <arch/barrier.h>
 #include <hal/hal_uart.h>
 #include <kernel/errno.h>
+#include <kernel/kstring.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -32,6 +33,8 @@ static void virtqueue_free_desc_chain(virtqueue_t *vq, uint16_t desc_idx);
 static void virtqueue_add_to_avail(virtqueue_t *vq, uint16_t desc_idx);
 static int virtqueue_get_used_buf(virtqueue_t *vq, uint16_t *desc_idx, uint32_t *len);
 static void virtqueue_notify(virtio_blk_device_t *dev, uint32_t queue_idx);
+static void virtqueue_reset_state(virtqueue_t *vq);
+static int virtio_blk_recover_queue(virtio_blk_device_t *dev);
 
 /**
  * Initialize virtqueue with descriptor, available, and used rings
@@ -40,8 +43,6 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
 {
     virtqueue_t *vq = &dev->queue;
     vq->queue_size = queue_size;
-    vq->last_seen_used = 0;
-    vq->num_free = queue_size;
     
     /* Calculate sizes for each ring */
     size_t desc_size = sizeof(virtq_desc_t) * queue_size;
@@ -75,12 +76,7 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
     vq->used = (virtq_used_t *)used_region->virt_addr;
     vq->used_phys = used_region->phys_addr;
     
-    /* Initialize free descriptor list (link all descriptors together) */
-    for (uint32_t i = 0; i < queue_size - 1; i++) {
-        vq->desc[i].next = (uint16_t)(i + 1);
-    }
-    vq->desc[queue_size - 1].next = 0;
-    vq->free_head = 0;
+    virtqueue_reset_state(vq);
     
     /* Configure queue in device */
     VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_SEL, 0);
@@ -101,6 +97,87 @@ static int virtqueue_init(virtio_blk_device_t *dev, uint32_t queue_size)
     /* Mark queue as ready */
     VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_READY, 1);
     
+    clear_errno();
+    return 0;
+}
+
+/**
+ * Reset virtqueue memory and descriptor freelist after init or device reset.
+ */
+static void virtqueue_reset_state(virtqueue_t *vq)
+{
+    size_t desc_size = sizeof(virtq_desc_t) * vq->queue_size;
+    size_t avail_size = sizeof(uint16_t) * (3 + vq->queue_size);
+    size_t used_size = sizeof(uint16_t) * 3 + sizeof(virtq_used_elem_t) * vq->queue_size;
+
+    kmemset(vq->desc, 0, desc_size);
+    kmemset(vq->avail, 0, avail_size);
+    kmemset(vq->used, 0, used_size);
+
+    vq->last_seen_used = 0;
+    vq->num_free = vq->queue_size;
+    vq->free_head = 0;
+
+    for (uint32_t i = 0; i < vq->queue_size - 1; i++) {
+        vq->desc[i].next = (uint16_t)(i + 1);
+    }
+    vq->desc[vq->queue_size - 1].next = 0;
+}
+
+/**
+ * Reset the device after a timed-out request and rebind the existing queue.
+ */
+static int virtio_blk_recover_queue(virtio_blk_device_t *dev)
+{
+    virtqueue_t *vq = &dev->queue;
+
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_STATUS, 0);
+    write_barrier();
+
+    uint32_t status = VIRTIO_STATUS_ACKNOWLEDGE;
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_STATUS, status);
+
+    status |= VIRTIO_STATUS_DRIVER;
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_STATUS, status);
+
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_DRIVER_FEATURES_SEL, 0);
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_DRIVER_FEATURES, (uint32_t)(dev->features & 0xFFFFFFFF));
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_DRIVER_FEATURES_SEL, 1);
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_DRIVER_FEATURES, (uint32_t)(dev->features >> 32));
+
+    status |= VIRTIO_STATUS_FEATURES_OK;
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_STATUS, status);
+
+    uint32_t status_check = VIRTIO_READ32(dev, VIRTIO_MMIO_STATUS);
+    if (!(status_check & VIRTIO_STATUS_FEATURES_OK)) {
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_BADDEV);
+    }
+
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_SEL, 0);
+    uint32_t queue_max = VIRTIO_READ32(dev, VIRTIO_MMIO_QUEUE_NUM_MAX);
+    if (queue_max == 0 || vq->queue_size > queue_max) {
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_BADDEV);
+    }
+
+    virtqueue_reset_state(vq);
+
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_NUM, vq->queue_size);
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_DESC_LOW, (uint32_t)(vq->desc_phys & 0xFFFFFFFF));
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_DESC_HIGH, (uint32_t)(vq->desc_phys >> 32));
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_AVAIL_LOW, (uint32_t)(vq->avail_phys & 0xFFFFFFFF));
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_AVAIL_HIGH, (uint32_t)(vq->avail_phys >> 32));
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_USED_LOW, (uint32_t)(vq->used_phys & 0xFFFFFFFF));
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_USED_HIGH, (uint32_t)(vq->used_phys >> 32));
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_QUEUE_READY, 1);
+
+    status |= VIRTIO_STATUS_DRIVER_OK;
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_STATUS, status);
+
+    uint32_t final_status = VIRTIO_READ32(dev, VIRTIO_MMIO_STATUS);
+    if (!(final_status & VIRTIO_STATUS_DRIVER_OK)) {
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_BADDEV);
+    }
+
     clear_errno();
     return 0;
 }
@@ -298,8 +375,11 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
         timeout--;
     }
     
-    /* Request timed out */
-    virtqueue_free_desc_chain(vq, desc_idx);
+    /* Reset and rebind the queue before returning so timed-out buffers are not recycled while the device still owns them. */
+    if (virtio_blk_recover_queue(dev) < 0) {
+        return -1;
+    }
+
     RETURN_ERRNO(THUNDEROS_EVIRTIO_TIMEOUT);
 }
 
