@@ -124,6 +124,11 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
         set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
+
+    if (wstatus && !process_validate_user_ptr(current, wstatus, sizeof(*wstatus), VM_WRITE)) {
+        set_errno(THUNDEROS_EFAULT);
+        return SYSCALL_ERROR;
+    }
     
     // Find zombie or stopped child process
     while (1) {
@@ -146,6 +151,8 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
             
             // Free child process resources
             process_free(child);
+
+            clear_errno();
             
             return child_pid;
         }
@@ -169,6 +176,8 @@ uint64_t sys_waitpid(int pid, int *wstatus, int options) {
             // Clear the stopped status so we don't report it again
             // (Process stays stopped until SIGCONT)
                 child->exit_code = 0;
+
+                clear_errno();
             
                 return child_pid;
             }
@@ -205,6 +214,8 @@ uint64_t sys_getpid(void) {
         set_errno(THUNDEROS_ESRCH);
         return SYSCALL_ERROR;
     }
+
+    clear_errno();
     
     return current_process->pid;
 }
@@ -230,6 +241,7 @@ uint64_t sys_sbrk(int heap_increment) {
     
     // If increment is zero, just return current brk
     if (heap_increment == 0) {
+        clear_errno();
         return old_brk;
     }
     
@@ -282,6 +294,8 @@ uint64_t sys_sbrk(int heap_increment) {
     
     // Update heap end
     proc->heap_end = new_brk;
+
+    clear_errno();
     
     return old_brk;
 }
@@ -296,6 +310,7 @@ uint64_t sys_sbrk(int heap_increment) {
  */
 uint64_t sys_sleep(uint64_t milliseconds) {
     if (milliseconds == 0) {
+        clear_errno();
         return SYSCALL_SUCCESS;
     }
     
@@ -344,6 +359,8 @@ uint64_t sys_sleep(uint64_t milliseconds) {
     
     /* Restore sscratch for proper return to user mode */
     __asm__ volatile("csrw sscratch, %0" :: "r"(saved_sscratch));
+
+    clear_errno();
     
     return SYSCALL_SUCCESS;
 }
@@ -355,6 +372,7 @@ uint64_t sys_sleep(uint64_t milliseconds) {
  */
 uint64_t sys_yield(void) {
     process_yield();
+    clear_errno();
     return SYSCALL_SUCCESS;
 }
 
@@ -373,6 +391,7 @@ uint64_t sys_getppid(void) {
     // Return ppid if available (currently PCB doesn't have ppid field)
     // For now, return 0 (init process has no parent)
     // TODO: Add ppid field to PCB structure
+    clear_errno();
     return 0;
 }
 
@@ -417,6 +436,7 @@ uint64_t sys_gettime(void) {
     uint64_t ticks = hal_timer_get_ticks();
     
     // Convert ticks to milliseconds (each tick = 100ms)
+    clear_errno();
     return ticks * TIMER_TICK_MS;
 }
 
