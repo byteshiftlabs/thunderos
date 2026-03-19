@@ -14,6 +14,7 @@
 #include "kernel/wait_queue.h"
 #include "mm/kmalloc.h"
 #include "kernel/kstring.h"
+#include "arch/interrupt.h"
 
 /**
  * Initialize pipe subsystem
@@ -75,8 +76,11 @@ int pipe_read(pipe_t* pipe, void* buffer, size_t count) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
 
+    int old_state = interrupt_save_disable();
+
     // Check if read end is already closed
     if (pipe->state == PIPE_READ_CLOSED || pipe->state == PIPE_CLOSED) {
+        interrupt_restore(old_state);
         RETURN_ERRNO(THUNDEROS_EPIPE);
     }
 
@@ -84,6 +88,7 @@ int pipe_read(pipe_t* pipe, void* buffer, size_t count) {
     while (pipe->data_size == 0) {
         // If write end is closed, return EOF
         if (pipe->state == PIPE_WRITE_CLOSED || pipe->write_ref_count == 0) {
+            interrupt_restore(old_state);
             clear_errno();
             return 0;  // EOF
         }
@@ -93,6 +98,7 @@ int pipe_read(pipe_t* pipe, void* buffer, size_t count) {
         
         // After waking, re-check conditions (might be spurious wakeup or close)
         if (pipe->state == PIPE_READ_CLOSED || pipe->state == PIPE_CLOSED) {
+            interrupt_restore(old_state);
             RETURN_ERRNO(THUNDEROS_EPIPE);
         }
     }
@@ -127,6 +133,8 @@ int pipe_read(pipe_t* pipe, void* buffer, size_t count) {
         wait_queue_wake(&pipe->writers);
     }
 
+    interrupt_restore(old_state);
+
     clear_errno();
     return (int)bytes_read;
 }
@@ -148,13 +156,17 @@ int pipe_write(pipe_t* pipe, const void* buffer, size_t count) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
 
+    int old_state = interrupt_save_disable();
+
     // Check if write end is already closed
     if (pipe->state == PIPE_WRITE_CLOSED || pipe->state == PIPE_CLOSED) {
+        interrupt_restore(old_state);
         RETURN_ERRNO(THUNDEROS_EPIPE);
     }
 
     // Check if read end is closed (broken pipe)
     if (pipe->state == PIPE_READ_CLOSED || pipe->read_ref_count == 0) {
+        interrupt_restore(old_state);
         RETURN_ERRNO(THUNDEROS_EPIPE);
     }
 
@@ -162,6 +174,7 @@ int pipe_write(pipe_t* pipe, const void* buffer, size_t count) {
     while (pipe->data_size >= PIPE_BUF_SIZE) {
         // Check for broken pipe
         if (pipe->state == PIPE_READ_CLOSED || pipe->read_ref_count == 0) {
+            interrupt_restore(old_state);
             RETURN_ERRNO(THUNDEROS_EPIPE);
         }
         
@@ -170,9 +183,11 @@ int pipe_write(pipe_t* pipe, const void* buffer, size_t count) {
         
         // After waking, re-check conditions
         if (pipe->state == PIPE_WRITE_CLOSED || pipe->state == PIPE_CLOSED) {
+            interrupt_restore(old_state);
             RETURN_ERRNO(THUNDEROS_EPIPE);
         }
         if (pipe->state == PIPE_READ_CLOSED || pipe->read_ref_count == 0) {
+            interrupt_restore(old_state);
             RETURN_ERRNO(THUNDEROS_EPIPE);
         }
     }
@@ -208,6 +223,8 @@ int pipe_write(pipe_t* pipe, const void* buffer, size_t count) {
         wait_queue_wake(&pipe->readers);
     }
 
+    interrupt_restore(old_state);
+
     clear_errno();
     return (int)bytes_written;
 }
@@ -226,6 +243,8 @@ int pipe_close_read(pipe_t* pipe) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
 
+    int old_state = interrupt_save_disable();
+
     if (pipe->read_ref_count > 0) {
         pipe->read_ref_count--;
     }
@@ -239,6 +258,8 @@ int pipe_close_read(pipe_t* pipe) {
         // Wake any writers - they'll get EPIPE
         wait_queue_wake(&pipe->writers);
     }
+
+    interrupt_restore(old_state);
 
     clear_errno();
     return 0;
@@ -259,6 +280,8 @@ int pipe_close_write(pipe_t* pipe) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
 
+    int old_state = interrupt_save_disable();
+
     if (pipe->write_ref_count > 0) {
         pipe->write_ref_count--;
     }
@@ -272,6 +295,8 @@ int pipe_close_write(pipe_t* pipe) {
         // Wake any readers - they'll get EOF
         wait_queue_wake(&pipe->readers);
     }
+
+    interrupt_restore(old_state);
 
     clear_errno();
     return 0;
@@ -287,7 +312,11 @@ int pipe_can_free(pipe_t* pipe) {
     if (!pipe) {
         return 0;
     }
-    return pipe->state == PIPE_CLOSED;
+
+    int old_state = interrupt_save_disable();
+    int can_free = pipe->state == PIPE_CLOSED;
+    interrupt_restore(old_state);
+    return can_free;
 }
 
 /**

@@ -51,10 +51,8 @@ void mutex_lock(mutex_t *mutex) {
     
     /* Spin until we can acquire the lock */
     while (mutex->locked == MUTEX_LOCKED) {
-        /* Add ourselves to the wait queue and sleep */
-        interrupt_restore(flags);
+        /* Keep interrupts masked until wait_queue_sleep owns the handoff. */
         wait_queue_sleep(&mutex->waiters);
-        flags = interrupt_save_disable();
     }
     
     /* We got the lock */
@@ -177,9 +175,8 @@ void semaphore_wait(semaphore_t *sem) {
     
     /* Wait while count is zero or negative */
     while (sem->count <= 0) {
-        interrupt_restore(flags);
+        /* Keep interrupts masked until wait_queue_sleep owns the handoff. */
         wait_queue_sleep(&sem->waiters);
-        flags = interrupt_save_disable();
     }
     
     /* Decrement count */

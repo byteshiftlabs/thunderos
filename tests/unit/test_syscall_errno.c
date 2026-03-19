@@ -216,6 +216,113 @@ static void test_signal_syscall_invalid_handler_sets_efault(void) {
     TEST_PASS();
 }
 
+static void test_mutex_destroy_locked_sets_ebusy(void) {
+    TEST_START("sys_mutex_destroy reports EBUSY for locked mutex");
+
+    uint64_t mutex_id = sys_mutex_create();
+    ASSERT_TRUE(mutex_id != (uint64_t)-1, "sys_mutex_create should succeed");
+    ASSERT_TRUE(sys_mutex_lock((int)mutex_id) == 0, "sys_mutex_lock should succeed");
+
+    clear_errno();
+    ASSERT_TRUE(sys_mutex_destroy((int)mutex_id) == (uint64_t)-1,
+                "sys_mutex_destroy should fail while mutex is locked");
+    ASSERT_TRUE(get_errno() == THUNDEROS_EBUSY,
+                "sys_mutex_destroy should set EBUSY for a live mutex");
+
+    ASSERT_TRUE(sys_mutex_unlock((int)mutex_id) == 0, "sys_mutex_unlock should succeed after busy destroy");
+    ASSERT_TRUE(sys_mutex_destroy((int)mutex_id) == 0, "sys_mutex_destroy should succeed once unlocked");
+
+    TEST_PASS();
+}
+
+static void test_mutex_unlock_non_owner_sets_eperm(void) {
+    TEST_START("sys_mutex_unlock reports EPERM for non-owner");
+
+    struct process *saved_process = process_current();
+    struct process other_process;
+    kmemset(&other_process, 0, sizeof(other_process));
+    other_process.pid = 99;
+
+    uint64_t mutex_id = sys_mutex_create();
+    ASSERT_TRUE(mutex_id != (uint64_t)-1, "sys_mutex_create should succeed");
+    ASSERT_TRUE(sys_mutex_lock((int)mutex_id) == 0, "sys_mutex_lock should succeed");
+
+    process_set_current(&other_process);
+    clear_errno();
+    ASSERT_TRUE(sys_mutex_unlock((int)mutex_id) == (uint64_t)-1,
+                "sys_mutex_unlock should fail for a non-owner");
+    ASSERT_TRUE(get_errno() == THUNDEROS_EPERM,
+                "sys_mutex_unlock should set EPERM for a non-owner");
+
+    process_set_current(saved_process);
+    ASSERT_TRUE(sys_mutex_unlock((int)mutex_id) == 0, "owner should still be able to unlock");
+    ASSERT_TRUE(sys_mutex_destroy((int)mutex_id) == 0, "sys_mutex_destroy should succeed after unlock");
+
+    TEST_PASS();
+}
+
+static void test_rwlock_destroy_live_sets_ebusy(void) {
+    TEST_START("sys_rwlock_destroy reports EBUSY for held rwlock");
+
+    uint64_t rwlock_id = sys_rwlock_create();
+    ASSERT_TRUE(rwlock_id != (uint64_t)-1, "sys_rwlock_create should succeed");
+    ASSERT_TRUE(sys_rwlock_read_lock((int)rwlock_id) == 0, "sys_rwlock_read_lock should succeed");
+
+    clear_errno();
+    ASSERT_TRUE(sys_rwlock_destroy((int)rwlock_id) == (uint64_t)-1,
+                "sys_rwlock_destroy should fail while readers hold the lock");
+    ASSERT_TRUE(get_errno() == THUNDEROS_EBUSY,
+                "sys_rwlock_destroy should set EBUSY for a live rwlock");
+
+    ASSERT_TRUE(sys_rwlock_read_unlock((int)rwlock_id) == 0, "sys_rwlock_read_unlock should succeed");
+    ASSERT_TRUE(sys_rwlock_destroy((int)rwlock_id) == 0, "sys_rwlock_destroy should succeed after release");
+
+    TEST_PASS();
+}
+
+static void test_process_set_tty_invalid_sets_einval(void) {
+    TEST_START("process_set_tty reports EINVAL for invalid tty index");
+
+    struct process proc;
+    kmemset(&proc, 0, sizeof(proc));
+
+    clear_errno();
+    ASSERT_TRUE(process_set_tty(&proc, 99) == -1,
+                "process_set_tty should fail for an invalid tty index");
+    ASSERT_TRUE(get_errno() == THUNDEROS_EINVAL,
+                "process_set_tty should set EINVAL for an invalid tty index");
+
+    TEST_PASS();
+}
+
+static void test_process_get_tty_null_sets_einval(void) {
+    TEST_START("process_get_tty reports EINVAL for NULL process");
+
+    clear_errno();
+    ASSERT_TRUE(process_get_tty(NULL) == -1,
+                "process_get_tty should fail for a NULL process");
+    ASSERT_TRUE(get_errno() == THUNDEROS_EINVAL,
+                "process_get_tty should set EINVAL for a NULL process");
+
+    TEST_PASS();
+}
+
+static void test_process_get_tty_clears_errno_on_success(void) {
+    TEST_START("process_get_tty clears stale errno on success");
+
+    struct process proc;
+    kmemset(&proc, 0, sizeof(proc));
+    proc.controlling_tty = -1;
+
+    set_errno(THUNDEROS_EIO);
+    ASSERT_TRUE(process_get_tty(&proc) == -1,
+                "process_get_tty should return the stored tty value");
+    ASSERT_TRUE(get_errno() == THUNDEROS_OK,
+                "process_get_tty should clear errno on success even for tty -1");
+
+    TEST_PASS();
+}
+
 void run_syscall_errno_tests(void) {
     struct process *saved_process = process_current();
 
@@ -244,6 +351,12 @@ void run_syscall_errno_tests(void) {
     test_gettime_clears_errno();
     test_signal_syscall_dispatch_installs_handler();
     test_signal_syscall_invalid_handler_sets_efault();
+    test_mutex_destroy_locked_sets_ebusy();
+    test_mutex_unlock_non_owner_sets_eperm();
+    test_rwlock_destroy_live_sets_ebusy();
+    test_process_set_tty_invalid_sets_einval();
+    test_process_get_tty_null_sets_einval();
+    test_process_get_tty_clears_errno_on_success();
 
     process_set_current(saved_process);
 
