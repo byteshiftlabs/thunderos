@@ -642,6 +642,13 @@ pid_t process_fork(struct trap_frame *current_tf) {
     /* Inherit process group and session from parent */
     child->pgid = parent->pgid;
     child->sid = parent->sid;
+
+    /* Fork inherits handlers and blocked signals, but not pending signals. */
+    child->pending_signals = 0;
+    child->blocked_signals = parent->blocked_signals;
+    for (int signal_index = 0; signal_index < NSIG; signal_index++) {
+        child->signal_handlers[signal_index] = parent->signal_handlers[signal_index];
+    }
     
     /* Copy parent's current working directory with proper null termination */
     int cwd_index = 0;
@@ -936,6 +943,7 @@ struct process *process_create_user(const char *name, void *user_code, size_t co
     
     // Mark as ready and enqueue for scheduling
     proc->state = PROC_READY;
+    signal_init_process(proc);
     scheduler_enqueue(proc);
     
     return proc;
@@ -978,7 +986,6 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     // Create isolated page table for this process
     proc->page_table = create_user_page_table();
     if (!proc->page_table) {
-        kfree((void *)proc->kernel_stack);
         process_free(proc);
         return NULL;
     }
@@ -994,8 +1001,6 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
         // TODO: Use proper segment permissions from ELF (R/W/X per segment)
         if (map_page(proc->page_table, vaddr, paddr, 
                            PTE_V | PTE_R | PTE_W | PTE_X | PTE_U) != 0) {
-            free_page_table(proc->page_table);
-            kfree((void *)proc->kernel_stack);
             process_free(proc);
             return NULL;
         }
@@ -1008,8 +1013,6 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     for (int i = 0; i < INITIAL_STACK_PAGES; i++) {
         uintptr_t stack_phys = pmm_alloc_page();
         if (!stack_phys) {
-            free_page_table(proc->page_table);
-            kfree((void *)proc->kernel_stack);
             process_free(proc);
             return NULL;
         }
@@ -1021,8 +1024,6 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
         uintptr_t stack_vaddr = stack_base_vaddr + ((size_t)i * PAGE_SIZE);
         if (map_page(proc->page_table, stack_vaddr, stack_phys,
                            PTE_V | PTE_R | PTE_W | PTE_U) != 0) {
-            free_page_table(proc->page_table);
-            kfree((void *)proc->kernel_stack);
             process_free(proc);
             return NULL;
         }
@@ -1033,8 +1034,6 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     // Allocate trap frame to save user state on traps
     proc->trap_frame = (struct trap_frame *)kmalloc(sizeof(struct trap_frame));
     if (!proc->trap_frame) {
-        free_page_table(proc->page_table);
-        kfree((void *)proc->kernel_stack);
         process_free(proc);
         return NULL;
     }
@@ -1107,9 +1106,6 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     
     // Setup memory isolation (VMAs for validation)
     if (process_setup_memory_isolation(proc) != 0) {
-        free_page_table(proc->page_table);
-        kfree((void *)proc->kernel_stack);
-        kfree(proc->trap_frame);
         process_free(proc);
         /* errno already set by process_setup_memory_isolation */
         return NULL;
@@ -1118,10 +1114,6 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     // Add VMAs for code segment
     if (process_add_vma(proc, code_base, code_base + code_size, 
                        VM_READ | VM_WRITE | VM_EXEC | VM_USER) != 0) {
-        process_cleanup_vmas(proc);
-        free_page_table(proc->page_table);
-        kfree((void *)proc->kernel_stack);
-        kfree(proc->trap_frame);
         process_free(proc);
         return NULL;
     }
@@ -1129,16 +1121,13 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     // Add VMA for stack segment
     if (process_add_vma(proc, stack_base_vaddr, USER_STACK_TOP,
                        VM_READ | VM_WRITE | VM_USER | VM_GROWSDOWN) != 0) {
-        process_cleanup_vmas(proc);
-        free_page_table(proc->page_table);
-        kfree((void *)proc->kernel_stack);
-        kfree(proc->trap_frame);
         process_free(proc);
         return NULL;
     }
     
     // Mark as ready and enqueue for scheduling
     proc->state = PROC_READY;
+    signal_init_process(proc);
     scheduler_enqueue(proc);
     
     return proc;

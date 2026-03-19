@@ -138,7 +138,7 @@ int signal_is_pending(struct process *proc, int signum);
  */
 void signal_default_term(struct process *proc);  // Terminate
 void signal_default_ignore(struct process *proc); // Ignore
-void signal_default_stop(struct process *proc);  // Stop
+void signal_default_stop(struct process *proc, int signum);  // Stop
 void signal_default_cont(struct process *proc);  // Continue
 
 /**
