@@ -13,14 +13,8 @@
 #include "kernel/kstring.h"
 #include "kernel/process.h"
 #include "kernel/scheduler.h"
+#include "drivers/vterm.h"
 #include "drivers/virtio_gpu.h"
-
-/* Forward declarations for vterm functions */
-extern int vterm_get_active(void);
-extern int vterm_switch(int terminal);
-extern void vterm_write_char(int terminal, char c);
-extern void vterm_write_string(int terminal, const char *str);
-extern int vterm_has_buffered_input_for(int terminal);
 
 void test_vterm_features(void) {
     hal_uart_puts("\n");
@@ -39,7 +33,7 @@ void test_vterm_features(void) {
     hal_uart_puts("  Checking vterm_get_active()... ");
     tests_total++;
     
-    int active = vterm_get_active();
+    int active = vterm_get_active_index();
     if (active >= 0 && active < 6) {
         hal_uart_puts("PASS (VT");
         kprint_dec(active + 1);
@@ -58,11 +52,11 @@ void test_vterm_features(void) {
     hal_uart_puts("  Switching to VT2 and back... ");
     tests_total++;
     
-    int original = vterm_get_active();
+    int original = vterm_get_active_index();
     vterm_switch(1);  /* Switch to VT2 (index 1) */
-    int after_switch = vterm_get_active();
+    int after_switch = vterm_get_active_index();
     vterm_switch(original);  /* Restore */
-    int restored = vterm_get_active();
+    int restored = vterm_get_active_index();
     
     if (after_switch == 1 && restored == original) {
         hal_uart_puts("PASS\n");
@@ -84,7 +78,7 @@ void test_vterm_features(void) {
     tests_total++;
     
     /* Write to VT2 (index 1) while we're on VT1 (index 0) */
-    vterm_write_string(1, "Test message to VT2\n");
+    vterm_puts_to(1, "Test message to VT2\n");
     
     /* This test just checks it doesn't crash */
     hal_uart_puts("PASS (no crash)\n");
