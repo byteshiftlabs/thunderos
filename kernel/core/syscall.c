@@ -1648,6 +1648,22 @@ uint64_t sys_mutex_unlock(int mutex_id) {
         set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
+
+    struct process *current = process_current();
+    if (!current) {
+        set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
+
+    if (user_mutexes[mutex_id].locked != MUTEX_LOCKED) {
+        set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
+
+    if (user_mutexes[mutex_id].owner_pid != current->pid) {
+        set_errno(THUNDEROS_EPERM);
+        return SYSCALL_ERROR;
+    }
     
     mutex_unlock(&user_mutexes[mutex_id]);
     clear_errno();
@@ -1663,6 +1679,12 @@ uint64_t sys_mutex_unlock(int mutex_id) {
 uint64_t sys_mutex_destroy(int mutex_id) {
     if (mutex_id < 0 || mutex_id >= MAX_USER_MUTEXES || !mutex_in_use[mutex_id]) {
         set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
+
+    if (user_mutexes[mutex_id].locked == MUTEX_LOCKED ||
+        !wait_queue_empty(&user_mutexes[mutex_id].waiters)) {
+        set_errno(THUNDEROS_EBUSY);
         return SYSCALL_ERROR;
     }
     
@@ -1764,6 +1786,11 @@ uint64_t sys_cond_broadcast(int cond_id) {
 uint64_t sys_cond_destroy(int cond_id) {
     if (cond_id < 0 || cond_id >= MAX_USER_CONDVARS || !condvar_in_use[cond_id]) {
         set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
+
+    if (!wait_queue_empty(&user_condvars[cond_id].waiters)) {
+        set_errno(THUNDEROS_EBUSY);
         return SYSCALL_ERROR;
     }
     
@@ -1879,6 +1906,14 @@ uint64_t sys_rwlock_write_unlock(int rwlock_id) {
 uint64_t sys_rwlock_destroy(int rwlock_id) {
     if (rwlock_id < 0 || rwlock_id >= MAX_USER_RWLOCKS || !rwlock_in_use[rwlock_id]) {
         set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
+
+    if (user_rwlocks[rwlock_id].readers > 0 || user_rwlocks[rwlock_id].writer ||
+        user_rwlocks[rwlock_id].writers_waiting > 0 ||
+        !wait_queue_empty(&user_rwlocks[rwlock_id].reader_queue) ||
+        !wait_queue_empty(&user_rwlocks[rwlock_id].writer_queue)) {
+        set_errno(THUNDEROS_EBUSY);
         return SYSCALL_ERROR;
     }
     

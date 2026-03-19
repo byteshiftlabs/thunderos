@@ -129,6 +129,7 @@ static struct process *alloc_process(void) {
     }
     
     lock_release(&process_lock);
+    set_errno(THUNDEROS_EPROC_LIMIT);
     return NULL;
 }
 
@@ -1302,6 +1303,8 @@ int process_add_vma(struct process *proc, uint64_t start, uint64_t end, uint32_t
     // Add to front of list
     vma->next = proc->vm_areas;
     proc->vm_areas = vma;
+
+    clear_errno();
     
     return 0;
 }
@@ -1514,15 +1517,17 @@ int process_validate_user_ptr(struct process *proc, const void *ptr, size_t size
  */
 int process_set_tty(struct process *proc, int tty_index) {
     if (!proc) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EINVAL);
     }
     
     /* Allow -1 (no controlling terminal) or 0-5 (valid VT index) */
     if (tty_index < -1 || tty_index >= VTERM_MAX_TERMINALS) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EINVAL);
     }
     
     proc->controlling_tty = tty_index;
+
+    clear_errno();
     return 0;
 }
 
@@ -1534,8 +1539,10 @@ int process_set_tty(struct process *proc, int tty_index) {
  */
 int process_get_tty(struct process *proc) {
     if (!proc) {
-        return -1;
+        RETURN_ERRNO(THUNDEROS_EINVAL);
     }
+
+    clear_errno();
     
     return proc->controlling_tty;
 }
