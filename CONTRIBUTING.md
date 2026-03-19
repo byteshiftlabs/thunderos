@@ -70,10 +70,10 @@ Thank you for your interest in contributing to ThunderOS! This guide will help y
 
 ## AI Usage Policy
 
-ThunderOS uses AI assistance for development. See [AI_USAGE.md](AI_USAGE.md) for guidelines on:
-- What AI can/cannot be used for
-- How to attribute AI-generated code
-- Review requirements for AI contributions
+ThunderOS uses AI assistance for development. See the [ai-dev-prompts](https://github.com/byteshiftlabs/ai-dev-prompts) repository for guidelines on:
+- Workflow conventions and prompt guidelines
+- Code review and error handling standards
+- Model-specific adapter layers
 
 ## Code of Conduct
 
