@@ -53,6 +53,11 @@ static int ext2_validate_superblock(ext2_fs_t *fs) {
         RETURN_ERRNO(THUNDEROS_EFS_INVAL);
     }
 
+    if (fs->superblock->s_blocks_per_group > fs->block_size * 8U ||
+        fs->superblock->s_inodes_per_group > fs->block_size * 8U) {
+        RETURN_ERRNO(THUNDEROS_EFS_INVAL);
+    }
+
     inode_size = fs->superblock->s_inode_size > 0 ?
                  fs->superblock->s_inode_size : EXT2_INODE_SIZE;
     if (inode_size < sizeof(ext2_inode_t) ||

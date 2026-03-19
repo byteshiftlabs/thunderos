@@ -10,6 +10,7 @@
 #include <mm/paging.h>
 #include <mm/kmalloc.h>
 #include <arch/barrier.h>
+#include <arch/interrupt.h>
 #include <hal/hal_uart.h>
 #include <kernel/errno.h>
 #include <kernel/kstring.h>
@@ -508,6 +509,15 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
         /* errno already set by virtqueue_init */
         return -1;
     }
+
+    if (!interrupt_register_handler(g_blk_device->irq, virtio_blk_irq_handler)) {
+        virtqueue_cleanup(&g_blk_device->queue);
+        kfree(g_blk_device);
+        g_blk_device = NULL;
+        RETURN_ERRNO(THUNDEROS_EDRV_INIT);
+    }
+
+    interrupt_enable_irq(g_blk_device->irq);
     
     /* Set DRIVER_OK status bit */
     status |= VIRTIO_STATUS_DRIVER_OK;
@@ -516,6 +526,8 @@ int virtio_blk_init(uintptr_t base_addr, uint32_t irq)
     /* Verify device accepted DRIVER_OK */
     uint32_t final_status = VIRTIO_READ32(g_blk_device, VIRTIO_MMIO_STATUS);
     if (!(final_status & VIRTIO_STATUS_DRIVER_OK)) {
+        interrupt_disable_irq(g_blk_device->irq);
+        interrupt_unregister_handler(g_blk_device->irq);
         virtqueue_cleanup(&g_blk_device->queue);
         kfree(g_blk_device);
         g_blk_device = NULL;
