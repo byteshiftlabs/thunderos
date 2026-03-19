@@ -97,8 +97,8 @@ echo "README for ThunderOS" > "${BUILD_DIR}/test_fs_contents/README.txt"
 
 # Copy userland programs
 for prog in hello cat ls; do
-    if [ -f "${ROOT_DIR}/userland/build/$prog" ]; then
-        cp "${ROOT_DIR}/userland/build/$prog" "${BUILD_DIR}/test_fs_contents/bin/"
+    if [ -f "${ROOT_DIR}/external/userland/build/$prog" ]; then
+        cp "${ROOT_DIR}/external/userland/build/$prog" "${BUILD_DIR}/test_fs_contents/bin/"
         print_pass "Added $prog to filesystem"
     fi
 done

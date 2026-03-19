@@ -96,7 +96,8 @@ include/             - Header files
   mm/                - Memory management headers (DMA, paging)
 docs/                - Sphinx documentation
 tests/               - Test framework and test cases
-userland/            - User-space programs
+external/            - External repositories and submodules
+  userland/          - User-space programs
 build/               - Build output
 ```
 
@@ -137,7 +138,7 @@ Test suite validates:
 
 ### User-Space Programs
 
-Located in `userland/`:
+Located in `external/userland/`:
 - **Core utilities**: cat, ls, pwd, mkdir, rmdir, touch, rm, clear, sleep
 - **System utilities**: ps, uname, uptime, whoami, tty, kill
 - **Shell**: ush (interactive shell with command history)

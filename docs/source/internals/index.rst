@@ -138,10 +138,11 @@ Source Files
    └── utils/
        └── kstring.c       # String utilities
 
-   userland/                # User-space programs
-   ├── bin/                 # Shell commands (ls, cat, etc.)
-   ├── core/                # C runtime (crt0, syscalls)
-   ├── lib/                 # User libraries
-   └── tests/               # User-mode tests
+   external/
+   └── userland/            # User-space programs
+       ├── bin/             # Shell commands (ls, cat, etc.)
+       ├── core/            # C runtime (crt0, syscalls)
+       ├── lib/             # User libraries
+       └── tests/           # User-mode tests
 
 See individual component pages for detailed technical documentation.

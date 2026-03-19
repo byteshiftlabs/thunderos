@@ -92,7 +92,8 @@ Project Structure
    │   ├── hal/           # Hardware Abstraction Layer
    │   ├── kernel/        # Kernel subsystem headers
    │   └── mm/            # Memory management headers
-   ├── userland/          # User-space programs
+   ├── external/
+   │   └── userland/      # User-space programs
    ├── tests/             # Automated test suite
    │   ├── framework/     # Test framework (kunit)
    │   ├── scripts/       # Integration test scripts
