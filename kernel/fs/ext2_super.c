@@ -35,6 +35,66 @@ static int read_block(void *device, uint32_t block_num, void *buffer, uint32_t b
     return 0;
 }
 
+static int ext2_validate_superblock(ext2_fs_t *fs) {
+    uint32_t inode_size;
+
+    if (!fs || !fs->superblock) {
+        RETURN_ERRNO(THUNDEROS_EINVAL);
+    }
+
+    if (fs->superblock->s_blocks_count == 0 ||
+        fs->superblock->s_inodes_count == 0 ||
+        fs->superblock->s_blocks_per_group == 0 ||
+        fs->superblock->s_inodes_per_group == 0) {
+        RETURN_ERRNO(THUNDEROS_EFS_INVAL);
+    }
+
+    if (fs->superblock->s_first_data_block >= fs->superblock->s_blocks_count) {
+        RETURN_ERRNO(THUNDEROS_EFS_INVAL);
+    }
+
+    inode_size = fs->superblock->s_inode_size > 0 ?
+                 fs->superblock->s_inode_size : EXT2_INODE_SIZE;
+    if (inode_size < sizeof(ext2_inode_t) ||
+        inode_size > fs->block_size ||
+        (fs->block_size % inode_size) != 0) {
+        RETURN_ERRNO(THUNDEROS_EFS_INVAL);
+    }
+
+    clear_errno();
+    return 0;
+}
+
+static int ext2_validate_group_descriptors(ext2_fs_t *fs) {
+    uint32_t inode_size;
+    uint32_t inode_table_blocks;
+
+    if (!fs || !fs->superblock || !fs->group_desc) {
+        RETURN_ERRNO(THUNDEROS_EINVAL);
+    }
+
+    inode_size = fs->superblock->s_inode_size > 0 ?
+                 fs->superblock->s_inode_size : EXT2_INODE_SIZE;
+    inode_table_blocks = (fs->superblock->s_inodes_per_group * inode_size + fs->block_size - 1) /
+                         fs->block_size;
+    if (inode_table_blocks == 0) {
+        RETURN_ERRNO(THUNDEROS_EFS_INVAL);
+    }
+
+    for (uint32_t group = 0; group < fs->num_groups; group++) {
+        ext2_group_desc_t *gd = &fs->group_desc[group];
+
+        if (!ext2_is_valid_block(fs, gd->bg_block_bitmap) ||
+            !ext2_is_valid_block(fs, gd->bg_inode_bitmap) ||
+            !ext2_is_valid_block_range(fs, gd->bg_inode_table, inode_table_blocks)) {
+            RETURN_ERRNO(THUNDEROS_EFS_BADGRP);
+        }
+    }
+
+    clear_errno();
+    return 0;
+}
+
 /**
  * Initialize and mount an ext2 filesystem
  */
@@ -98,6 +158,12 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
         fs->superblock = NULL;
         RETURN_ERRNO(THUNDEROS_EFS_INVAL);
     }
+
+    if (ext2_validate_superblock(fs) != 0) {
+        kfree(fs->superblock);
+        fs->superblock = NULL;
+        return -1;
+    }
     
     /* Calculate number of block groups */
     fs->num_groups = (fs->superblock->s_blocks_count + fs->superblock->s_blocks_per_group - 1) 
@@ -114,6 +180,14 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
     /* Allocate buffer for group descriptors */
     uint32_t gdt_blocks = (fs->num_groups + fs->desc_per_block - 1) / fs->desc_per_block;
     uint32_t gdt_size = gdt_blocks * fs->block_size;
+    uint32_t gdt_block = fs->superblock->s_first_data_block + 1;
+    if (fs->num_groups == 0 || fs->inodes_per_block == 0 || gdt_blocks == 0 ||
+        !ext2_is_valid_block_range(fs, gdt_block, gdt_blocks)) {
+        kfree(fs->superblock);
+        fs->superblock = NULL;
+        RETURN_ERRNO(THUNDEROS_EFS_INVAL);
+    }
+
     fs->group_desc = (ext2_group_desc_t *)kmalloc(gdt_size);
     if (!fs->group_desc) {
         kfree(fs->superblock);
@@ -122,7 +196,6 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
     }
     
     /* Read group descriptor table (starts in block after superblock) */
-    uint32_t gdt_block = fs->superblock->s_first_data_block + 1;
     for (uint32_t i = 0; i < gdt_blocks; i++) {
         ret = read_block(device, gdt_block + i, 
                         (uint8_t *)fs->group_desc + ((size_t)i * fs->block_size),
@@ -135,6 +208,14 @@ int ext2_mount(ext2_fs_t *fs, void *device) {
             /* errno already set by read_block */
             return -1;
         }
+    }
+
+    if (ext2_validate_group_descriptors(fs) != 0) {
+        kfree(fs->group_desc);
+        kfree(fs->superblock);
+        fs->group_desc = NULL;
+        fs->superblock = NULL;
+        return -1;
     }
     
     clear_errno();

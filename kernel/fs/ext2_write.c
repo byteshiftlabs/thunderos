@@ -81,8 +81,15 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
             for (uint32_t i = 0; i < fs->block_size; i++) {
                 zero_buf[i] = 0;
             }
-            write_block(fs->device, inode->i_block[file_block], zero_buf, fs->block_size);
+            if (write_block(fs->device, inode->i_block[file_block], zero_buf, fs->block_size) != 0) {
+                kfree(zero_buf);
+                return 0;
+            }
             kfree(zero_buf);
+        }
+        if (inode->i_block[file_block] != 0 && !ext2_is_valid_block(fs, inode->i_block[file_block])) {
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
         }
         return inode->i_block[file_block];
     }
@@ -109,13 +116,22 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
             for (uint32_t i = 0; i < fs->block_size; i++) {
                 zero_buf[i] = 0;
             }
-            write_block(fs->device, inode->i_block[EXT2_IND_BLOCK], zero_buf, fs->block_size);
+            if (write_block(fs->device, inode->i_block[EXT2_IND_BLOCK], zero_buf, fs->block_size) != 0) {
+                kfree(zero_buf);
+                return 0;
+            }
             kfree(zero_buf);
+        }
+
+        if (!ext2_is_valid_block(fs, inode->i_block[EXT2_IND_BLOCK])) {
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
         }
         
         /* Read indirect block */
         indirect_buffer = (uint32_t *)kmalloc(fs->block_size);
         if (!indirect_buffer) {
+            set_errno(THUNDEROS_ENOMEM);
             return 0;
         }
         
@@ -133,8 +149,11 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
                 return 0;
             }
             /* Write updated indirect block */
-            write_block(fs->device, inode->i_block[EXT2_IND_BLOCK], 
-                       indirect_buffer, fs->block_size);
+            if (write_block(fs->device, inode->i_block[EXT2_IND_BLOCK], 
+                           indirect_buffer, fs->block_size) != 0) {
+                kfree(indirect_buffer);
+                return 0;
+            }
             /* Zero the new data block */
             uint8_t *zero_buf = (uint8_t *)kmalloc(fs->block_size);
             if (!zero_buf) {
@@ -145,11 +164,20 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
             for (uint32_t i = 0; i < fs->block_size; i++) {
                 zero_buf[i] = 0;
             }
-            write_block(fs->device, indirect_buffer[file_block], zero_buf, fs->block_size);
+            if (write_block(fs->device, indirect_buffer[file_block], zero_buf, fs->block_size) != 0) {
+                kfree(zero_buf);
+                kfree(indirect_buffer);
+                return 0;
+            }
             kfree(zero_buf);
         }
         
         block_num = indirect_buffer[file_block];
+        if (block_num != 0 && !ext2_is_valid_block(fs, block_num)) {
+            kfree(indirect_buffer);
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
+        }
         kfree(indirect_buffer);
         return block_num;
     }
@@ -176,13 +204,22 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
             for (uint32_t i = 0; i < fs->block_size; i++) {
                 zero_buf[i] = 0;
             }
-            write_block(fs->device, inode->i_block[EXT2_DIND_BLOCK], zero_buf, fs->block_size);
+            if (write_block(fs->device, inode->i_block[EXT2_DIND_BLOCK], zero_buf, fs->block_size) != 0) {
+                kfree(zero_buf);
+                return 0;
+            }
             kfree(zero_buf);
+        }
+
+        if (!ext2_is_valid_block(fs, inode->i_block[EXT2_DIND_BLOCK])) {
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
         }
         
         /* Read double-indirect block */
         dindirect_buffer = (uint32_t *)kmalloc(fs->block_size);
         if (!dindirect_buffer) {
+            set_errno(THUNDEROS_ENOMEM);
             return 0;
         }
         
@@ -204,8 +241,11 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
             }
             dindirect_buffer[indirect_index] = indirect_block_num;
             /* Write updated double-indirect block */
-            write_block(fs->device, inode->i_block[EXT2_DIND_BLOCK], 
-                       dindirect_buffer, fs->block_size);
+            if (write_block(fs->device, inode->i_block[EXT2_DIND_BLOCK], 
+                           dindirect_buffer, fs->block_size) != 0) {
+                kfree(dindirect_buffer);
+                return 0;
+            }
             /* Zero the new indirect block */
             uint8_t *zero_buf = (uint8_t *)kmalloc(fs->block_size);
             if (!zero_buf) {
@@ -216,7 +256,11 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
             for (uint32_t i = 0; i < fs->block_size; i++) {
                 zero_buf[i] = 0;
             }
-            write_block(fs->device, indirect_block_num, zero_buf, fs->block_size);
+            if (write_block(fs->device, indirect_block_num, zero_buf, fs->block_size) != 0) {
+                kfree(zero_buf);
+                kfree(dindirect_buffer);
+                return 0;
+            }
             kfree(zero_buf);
         }
         
@@ -225,10 +269,16 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
         if (indirect_block_num == 0) {
             return 0;
         }
+
+        if (!ext2_is_valid_block(fs, indirect_block_num)) {
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
+        }
         
         /* Read indirect block */
         indirect_buffer = (uint32_t *)kmalloc(fs->block_size);
         if (!indirect_buffer) {
+            set_errno(THUNDEROS_ENOMEM);
             return 0;
         }
         
@@ -247,7 +297,10 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
                 return 0;
             }
             /* Write updated indirect block */
-            write_block(fs->device, indirect_block_num, indirect_buffer, fs->block_size);
+            if (write_block(fs->device, indirect_block_num, indirect_buffer, fs->block_size) != 0) {
+                kfree(indirect_buffer);
+                return 0;
+            }
             /* Zero the new data block */
             uint8_t *zero_buf = (uint8_t *)kmalloc(fs->block_size);
             if (!zero_buf) {
@@ -258,11 +311,20 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
             for (uint32_t i = 0; i < fs->block_size; i++) {
                 zero_buf[i] = 0;
             }
-            write_block(fs->device, indirect_buffer[data_index], zero_buf, fs->block_size);
+            if (write_block(fs->device, indirect_buffer[data_index], zero_buf, fs->block_size) != 0) {
+                kfree(zero_buf);
+                kfree(indirect_buffer);
+                return 0;
+            }
             kfree(zero_buf);
         }
         
         block_num = indirect_buffer[data_index];
+        if (block_num != 0 && !ext2_is_valid_block(fs, block_num)) {
+            kfree(indirect_buffer);
+            set_errno(THUNDEROS_EFS_BADBLK);
+            return 0;
+        }
         kfree(indirect_buffer);
         return block_num;
     }
@@ -316,10 +378,9 @@ int ext2_write_file(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t offset,
         /* If we're writing a partial block, read it first */
         if (block_offset != 0 || to_write < fs->block_size) {
             if (read_block(fs->device, block_num, block_buffer, fs->block_size) != 0) {
-                /* If read fails, zero the buffer (might be a new block) */
-                for (uint32_t i = 0; i < fs->block_size; i++) {
-                    block_buffer[i] = 0;
-                }
+                hal_uart_puts("ext2: Failed to read existing data block before partial write\n");
+                kfree(block_buffer);
+                return -1;
             }
         }
         
@@ -420,13 +481,18 @@ static int add_dir_entry(ext2_fs_t *fs, ext2_inode_t *dir_inode, uint32_t dir_in
     while (offset < dir_size) {
         ext2_dirent_t *entry = (ext2_dirent_t *)(dir_buffer + offset);
         
-        if (entry->rec_len == 0) {
-            break;
+        if (!ext2_is_valid_dirent(fs, entry, offset, dir_size)) {
+            kfree(dir_buffer);
+            RETURN_ERRNO(THUNDEROS_EFS_BADDIR);
+        }
+
+        if (entry->inode != 0 && entry->inode > fs->superblock->s_inodes_count) {
+            kfree(dir_buffer);
+            RETURN_ERRNO(THUNDEROS_EFS_BADDIR);
         }
         
         /* Calculate actual size used by this entry */
-        uint32_t actual_len = 8 + entry->name_len;
-        actual_len = (actual_len + 3) & ~3;
+        uint32_t actual_len = ext2_dirent_required_len(entry->name_len);
         
         /* Check if there's space in this entry */
         if (entry->inode != 0 && entry->rec_len >= actual_len + required_len) {
@@ -516,10 +582,14 @@ uint32_t ext2_create_file(ext2_fs_t *fs, uint32_t dir_inode_num, const char *nam
     }
     
     /* Check if file already exists */
+    clear_errno();
     uint32_t existing = ext2_lookup(fs, &dir_inode, name);
     if (existing != 0) {
         hal_uart_puts("ext2: File already exists\n");
         set_errno(THUNDEROS_EEXIST);
+        return 0;
+    }
+    if (get_errno() != THUNDEROS_ENOENT) {
         return 0;
     }
     
@@ -595,10 +665,14 @@ uint32_t ext2_create_dir(ext2_fs_t *fs, uint32_t dir_inode_num, const char *name
     }
     
     /* Check if directory already exists */
+    clear_errno();
     uint32_t existing = ext2_lookup(fs, &dir_inode, name);
     if (existing != 0) {
         hal_uart_puts("ext2: Directory already exists\n");
         set_errno(THUNDEROS_EEXIST);
+        return 0;
+    }
+    if (get_errno() != THUNDEROS_ENOENT) {
         return 0;
     }
     
@@ -837,8 +911,14 @@ static int remove_dir_entry(ext2_fs_t *fs, ext2_inode_t *dir_inode,
     while (offset < dir_size) {
         ext2_dirent_t *entry = (ext2_dirent_t *)(dir_buffer + offset);
         
-        if (entry->rec_len == 0) {
-            break;
+        if (!ext2_is_valid_dirent(fs, entry, offset, dir_size)) {
+            kfree(dir_buffer);
+            RETURN_ERRNO(THUNDEROS_EFS_BADDIR);
+        }
+
+        if (entry->inode != 0 && entry->inode > fs->superblock->s_inodes_count) {
+            kfree(dir_buffer);
+            RETURN_ERRNO(THUNDEROS_EFS_BADDIR);
         }
         
         /* Check if this is the entry we're looking for */
@@ -920,8 +1000,14 @@ static int is_dir_empty(ext2_fs_t *fs, ext2_inode_t *dir_inode) {
     while (offset < dir_inode->i_size) {
         ext2_dirent_t *entry = (ext2_dirent_t *)(dir_buffer + offset);
         
-        if (entry->rec_len == 0) {
-            break;
+        if (!ext2_is_valid_dirent(fs, entry, offset, dir_inode->i_size)) {
+            kfree(dir_buffer);
+            RETURN_ERRNO(THUNDEROS_EFS_BADDIR);
+        }
+
+        if (entry->inode != 0 && entry->inode > fs->superblock->s_inodes_count) {
+            kfree(dir_buffer);
+            RETURN_ERRNO(THUNDEROS_EFS_BADDIR);
         }
         
         if (entry->inode != 0) {
@@ -971,9 +1057,13 @@ int ext2_remove_file(ext2_fs_t *fs, uint32_t dir_inode_num, const char *name) {
     }
     
     /* Look up the file to remove */
+    clear_errno();
     uint32_t file_inode_num = ext2_lookup(fs, &dir_inode, name);
     if (file_inode_num == 0) {
-        RETURN_ERRNO(THUNDEROS_ENOENT);
+        if (get_errno() == THUNDEROS_ENOENT) {
+            RETURN_ERRNO(THUNDEROS_ENOENT);
+        }
+        return -1;
     }
     
     /* Read file inode */
@@ -1066,9 +1156,13 @@ int ext2_remove_dir(ext2_fs_t *fs, uint32_t dir_inode_num, const char *name) {
     }
     
     /* Look up the directory to remove */
+    clear_errno();
     uint32_t target_inode_num = ext2_lookup(fs, &parent_inode, name);
     if (target_inode_num == 0) {
-        RETURN_ERRNO(THUNDEROS_ENOENT);
+        if (get_errno() == THUNDEROS_ENOENT) {
+            RETURN_ERRNO(THUNDEROS_ENOENT);
+        }
+        return -1;
     }
     
     /* Read target inode */

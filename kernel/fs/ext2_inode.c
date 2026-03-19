@@ -97,6 +97,12 @@ int ext2_read_inode(ext2_fs_t *fs, uint32_t inode_num, ext2_inode_t *inode) {
     uint32_t inode_size = fs->superblock->s_inode_size > 0 ? 
                           fs->superblock->s_inode_size : EXT2_INODE_SIZE;
     uint32_t block_offset = (inode_table_index % fs->inodes_per_block) * inode_size;
+
+    if (!ext2_is_valid_block(fs, inode_block) ||
+        block_offset > fs->block_size ||
+        sizeof(ext2_inode_t) > fs->block_size - block_offset) {
+        RETURN_ERRNO(THUNDEROS_EFS_BADINO);
+    }
     
     /* Allocate temporary buffer for the block */
     uint8_t *block_buffer = (uint8_t *)kmalloc(fs->block_size);
@@ -170,6 +176,12 @@ int ext2_write_inode(ext2_fs_t *fs, uint32_t inode_num, ext2_inode_t *inode) {
     uint32_t inode_size = fs->superblock->s_inode_size > 0 ? 
                           fs->superblock->s_inode_size : EXT2_INODE_SIZE;
     uint32_t block_offset = (inode_table_index % fs->inodes_per_block) * inode_size;
+
+    if (!ext2_is_valid_block(fs, inode_block) ||
+        block_offset > fs->block_size ||
+        sizeof(ext2_inode_t) > fs->block_size - block_offset) {
+        RETURN_ERRNO(THUNDEROS_EFS_BADINO);
+    }
     
     /* Allocate temporary buffer for the block */
     uint8_t *block_buffer = (uint8_t *)kmalloc(fs->block_size);
