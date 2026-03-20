@@ -397,6 +397,27 @@ void process_yield(void) {
     schedule();
 }
 
+void process_block_current(void) {
+    struct process *proc = process_current();
+    if (!proc) {
+        return;
+    }
+
+    int old_state = interrupt_save_disable();
+
+    while (proc->state == PROC_SLEEPING) {
+        schedule();
+
+        if (proc->state == PROC_SLEEPING) {
+            interrupt_restore(INTERRUPTS_ENABLED);
+            __asm__ volatile("wfi");
+            (void)interrupt_save_disable();
+        }
+    }
+
+    interrupt_restore(old_state);
+}
+
 /**
  * Find a zombie child process
  * 
@@ -530,11 +551,12 @@ void process_sleep(uint64_t ticks) {
     
     lock_acquire(&process_lock);
     proc->state = PROC_SLEEPING;
+    scheduler_dequeue(proc);
     // TODO: Add to sleep queue with wakeup time
     (void)ticks;  // Mark unused parameter
     lock_release(&process_lock);
     
-    process_yield();
+    process_block_current();
 }
 
 /**
