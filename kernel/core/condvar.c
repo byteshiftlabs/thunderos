@@ -68,7 +68,6 @@ void cond_wait(condvar_t *cv, mutex_t *mutex) {
      * We're still holding interrupts disabled, so no wakeup can be lost.
      * The wait_queue_sleep function will restore interrupts and yield.
      */
-    interrupt_restore(flags);
     wait_queue_sleep(&cv->waiters);
     
     /* 
@@ -76,6 +75,8 @@ void cond_wait(condvar_t *cv, mutex_t *mutex) {
      * This blocks if another process has taken it.
      */
     mutex_lock(mutex);
+
+    interrupt_restore(flags);
     
     /* 
      * Mutex is now locked, we can return to the caller.

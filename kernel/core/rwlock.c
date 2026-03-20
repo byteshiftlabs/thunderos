@@ -45,9 +45,8 @@ void rwlock_read_lock(rwlock_t *rw) {
     
     /* Wait while a writer holds the lock or writers are waiting */
     while (rw->writer || rw->writers_waiting > 0) {
-        interrupt_restore(flags);
+        /* Keep interrupts masked until wait_queue_sleep owns the handoff. */
         wait_queue_sleep(&rw->reader_queue);
-        flags = interrupt_save_disable();
     }
     
     /* Acquired read lock */
@@ -132,9 +131,8 @@ void rwlock_write_lock(rwlock_t *rw) {
     
     /* Wait while readers hold the lock or another writer holds it */
     while (rw->readers > 0 || rw->writer) {
-        interrupt_restore(flags);
+        /* Keep interrupts masked until wait_queue_sleep owns the handoff. */
         wait_queue_sleep(&rw->writer_queue);
-        flags = interrupt_save_disable();
     }
     
     /* Acquired write lock */
