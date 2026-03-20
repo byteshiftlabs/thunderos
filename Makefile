@@ -27,11 +27,18 @@ INCLUDE_DIR := include
 # Build configuration
 ENABLE_TESTS ?= 0
 TEST_MODE ?= 0
+OPT_LEVEL ?= -O0
+DEBUG_SYMBOLS ?= 1
+QEMU_ACCEL_FLAGS ?= -accel tcg,thread=multi
+QEMU_EXTRA_FLAGS ?=
 
 # Compiler flags
 CFLAGS := -march=rv64gc -mabi=lp64d -mcmodel=medany
 CFLAGS += -nostdlib -nostartfiles -ffreestanding -fno-common
-CFLAGS += -O0 -g -Wall -Wextra
+CFLAGS += $(OPT_LEVEL) -Wall -Wextra
+ifeq ($(DEBUG_SYMBOLS),1)
+	CFLAGS += -g
+endif
 CFLAGS += -I$(INCLUDE_DIR)
 
 # Enable kernel tests (set ENABLE_TESTS=0 to disable)
@@ -91,6 +98,8 @@ KERNEL_BIN := $(BUILD_DIR)/thunderos.bin
 # QEMU flags for -bios none (run our own M-mode code, not OpenSBI)
 QEMU_FLAGS := -machine virt -m 128M -nographic -serial mon:stdio
 QEMU_FLAGS += -bios none
+QEMU_FLAGS += $(QEMU_ACCEL_FLAGS)
+QEMU_FLAGS += $(QEMU_EXTRA_FLAGS)
 
 # Filesystem image
 FS_IMG := $(BUILD_DIR)/fs.img
@@ -145,9 +154,13 @@ help:
 	@echo "$(BOLD)Build Options:$(RESET)"
 	@echo "  $(YELLOW)ENABLE_TESTS=1$(RESET)    Include kernel tests in build"
 	@echo "  $(YELLOW)TEST_MODE=1$(RESET)       Run tests and halt (no shell)"
+	@echo "  $(YELLOW)OPT_LEVEL=-O2$(RESET)     Optimization level for normal builds"
+	@echo "  $(YELLOW)DEBUG_SYMBOLS=1$(RESET)   Keep debug symbols in optimized builds"
+	@echo "  $(YELLOW)QEMU_ACCEL_FLAGS=...$(RESET) Override QEMU acceleration flags"
 	@echo ""
 	@echo "$(BOLD)Examples:$(RESET)"
 	@echo "  $(CYAN)make run$(RESET)                    # Quick start"
+	@echo "  $(CYAN)make OPT_LEVEL=-O3 qemu$(RESET)    # Faster optimized run"
 	@echo "  $(CYAN)make qemu-gpu-web$(RESET)           # Run with graphics"
 	@echo "  $(CYAN)make ENABLE_TESTS=1 test$(RESET)    # Run with kernel tests"
 	@echo ""

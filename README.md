@@ -24,12 +24,22 @@ See [CHANGELOG.md](CHANGELOG.md) for complete feature list and [ROADMAP.md](ROAD
 make clean && make
 ```
 
+For an opt-in faster guest build while keeping symbols:
+```bash
+make OPT_LEVEL=-O2 DEBUG_SYMBOLS=1
+```
+
 ### Running in QEMU
 ```bash
 make qemu
 ```
 
 The OS will automatically build the filesystem image and start QEMU with VirtIO block device support.
+
+For smoother local runs, you can override QEMU acceleration and extra flags:
+```bash
+QEMU_ACCEL_FLAGS='-accel tcg,thread=multi' QEMU_EXTRA_FLAGS='' ./run_os.sh
+```
 
 ### Automated Testing
 ```bash
