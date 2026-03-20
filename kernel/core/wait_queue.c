@@ -74,6 +74,10 @@ void wait_queue_sleep(wait_queue_t *wq) {
     // Yield CPU while interrupts stay ordered with the blocked state.
     process_block_current();
 
+    // If the process left the sleep state for some other reason (for example,
+    // a stop signal), remove any stale queue entry that a wake path did not free.
+    (void)wait_queue_remove(wq, current);
+
     interrupt_restore(old_state);
     
     // We've been woken up - the entry was freed by wake function
