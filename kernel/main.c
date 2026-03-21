@@ -46,6 +46,7 @@ extern void test_memory_management(void);
 extern void test_elf_all(void);
 extern void run_memory_isolation_tests(void);
 extern void run_syscall_errno_tests(void);
+extern void test_v070_features(void);
 #endif
 
 /* Forward declarations for helper functions */
@@ -166,6 +167,7 @@ static void run_memory_tests(void) {
     hal_uart_puts("\n[INFO] Running built-in kernel tests...\n");
     test_memory_management();
     test_elf_all();
+    run_memory_isolation_tests();
     hal_uart_puts("[INFO] Built-in tests completed\n\n");
 }
 #endif
@@ -396,6 +398,10 @@ void kernel_main(void) {
 
     /* Try to initialize GPU (optional - console works without it) */
     init_gpu_device();
+
+#ifdef ENABLE_KERNEL_TESTS
+    test_v070_features();
+#endif
 
 #ifdef TEST_MODE
     hal_uart_puts("\n");
