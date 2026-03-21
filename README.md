@@ -120,7 +120,7 @@ make test
 cd tests/scripts
 ./test_boot.sh          # Boot sequence validation
 ./test_integration.sh   # Full integration tests
-./test_user_mode.sh     # User mode and syscalls
+./test_kernel.sh        # Comprehensive kernel test suite
 ```
 
 Test suite validates:
