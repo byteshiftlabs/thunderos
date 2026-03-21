@@ -8,7 +8,7 @@ readonly CC="${CROSS_COMPILE}gcc"
 readonly LD="${CROSS_COMPILE}ld"
 readonly OBJCOPY="${CROSS_COMPILE}objcopy"
 
-readonly USERLAND_DIR="$(cd "$(dirname "$0")" && pwd)/userland"
+readonly USERLAND_DIR="$(cd "$(dirname "$0")" && pwd)/external/userland"
 readonly BUILD_DIR="${USERLAND_DIR}/build"
 
 readonly CFLAGS="-march=rv64gc -mabi=lp64d -nostdlib -nostartfiles -ffreestanding -fno-common -O0 -g -Wall"
