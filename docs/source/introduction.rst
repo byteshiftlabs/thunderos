@@ -67,7 +67,7 @@ including prerequisites, build options (Docker or native), and testing.
 
 .. code-block:: bash
 
-   git clone <repository>
+   git clone --recurse-submodules <repository>
    cd thunderos
    make run              # Build and run in QEMU
 
