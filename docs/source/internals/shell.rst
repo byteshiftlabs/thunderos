@@ -249,7 +249,7 @@ Implementation Details
 Source File
 ~~~~~~~~~~~
 
-The shell is implemented in ``userland/ush.c`` with clean, modular code:
+The shell is implemented in ``external/userland/bin/ush.c`` with clean, modular code:
 
 - Organized into logical sections (string utils, history, parsing, execution)
 - Static helper functions with single responsibilities
@@ -373,12 +373,13 @@ Userland programs are built with the RISC-V cross-compiler:
     
     # Individual program compilation
     riscv64-unknown-elf-gcc -O0 -g -nostdlib -nostartfiles \
-        -T user.ld -o build/hello userland/hello.c userland/syscall.S
+  -T external/userland/lib/user.ld -o external/userland/build/hello \
+  external/userland/tests/hello.c external/userland/lib/syscall.S
 
 Linker Script
 ~~~~~~~~~~~~~
 
-Userland programs use ``userland/user.ld``:
+Userland programs use ``external/userland/lib/user.ld``:
 
 .. code-block:: text
 

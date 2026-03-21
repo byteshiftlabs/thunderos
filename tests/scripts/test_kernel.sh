@@ -93,8 +93,8 @@ echo "Hello from ext2!" > "${BUILD_DIR}/test_fs_contents/hello.txt"
 
 # Copy userland programs if they exist
 for prog in hello cat ls pwd mkdir rmdir clear ush; do
-    if [ -f "${ROOT_DIR}/userland/build/$prog" ]; then
-        cp "${ROOT_DIR}/userland/build/$prog" "${BUILD_DIR}/test_fs_contents/bin/"
+    if [ -f "${ROOT_DIR}/external/userland/build/$prog" ]; then
+        cp "${ROOT_DIR}/external/userland/build/$prog" "${BUILD_DIR}/test_fs_contents/bin/"
     fi
 done
 
