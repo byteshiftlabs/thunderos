@@ -12,6 +12,10 @@ readonly KERNEL_ELF="build/thunderos.elf"
 readonly FS_IMG="build/fs.img"
 readonly FS_SIZE="10M"
 
+print_usage() {
+    echo "Usage: ./build_os.sh [--clean]"
+}
+
 require_command() {
     local command_name="$1"
     local install_hint="$2"
@@ -24,11 +28,37 @@ require_command() {
 }
 
 main() {
+    local clean_build=false
+
+    if [[ $# -gt 1 ]]; then
+        print_usage >&2
+        exit 1
+    fi
+
+    if [[ $# -eq 1 ]]; then
+        case "$1" in
+            --clean)
+                clean_build=true
+                ;;
+            -h|--help)
+                print_usage
+                exit 0
+                ;;
+            *)
+                print_usage >&2
+                exit 1
+                ;;
+        esac
+    fi
+
     echo "Building ThunderOS kernel..."
 
     require_command mkfs.ext2 "Install e2fsprogs: sudo apt-get install e2fsprogs"
-    
-    make clean
+
+    if [[ "${clean_build}" == true ]]; then
+        make clean
+    fi
+
     make all
     
     if [[ ! -f "${KERNEL_ELF}" ]]; then
