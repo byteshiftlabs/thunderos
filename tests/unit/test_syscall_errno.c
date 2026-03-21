@@ -11,8 +11,10 @@
 #include "kernel/errno.h"
 #include "kernel/process.h"
 #include "kernel/signal.h"
+#include "kernel/constants.h"
 #include "kernel/kstring.h"
 #include "hal/hal_uart.h"
+#include "mm/paging.h"
 #include "trap.h"
 
 /* Forward declaration: implemented in kernel/core/process.c */
@@ -50,6 +52,38 @@ static int tests_failed = 0;
             TEST_FAIL(msg); \
         } \
     } while (0)
+
+static int setup_test_user_process(struct process *proc, const char *name, pid_t pid) {
+    kmemset(proc, 0, sizeof(*proc));
+    proc->pid = pid;
+    proc->state = PROC_RUNNING;
+    kstrcpy(proc->name, name);
+
+    proc->page_table = create_user_page_table();
+    if (!proc->page_table) {
+        return -1;
+    }
+
+    if (process_setup_memory_isolation(proc) != 0) {
+        free_page_table(proc->page_table);
+        proc->page_table = NULL;
+        return -1;
+    }
+
+    return 0;
+}
+
+static void cleanup_test_user_process(struct process *proc) {
+    if (!proc) {
+        return;
+    }
+
+    process_cleanup_vmas(proc);
+    if (proc->page_table) {
+        free_page_table(proc->page_table);
+        proc->page_table = NULL;
+    }
+}
 
 static void test_getuid_clears_errno(void) {
     TEST_START("sys_getuid clears stale errno on success");
@@ -323,6 +357,64 @@ static void test_process_get_tty_clears_errno_on_success(void) {
     TEST_PASS();
 }
 
+static void test_mmap_chooses_first_fitting_gap(void) {
+    TEST_START("sys_mmap chooses the first fitting free gap");
+
+    struct process *saved_process = process_current();
+    struct process proc;
+
+    ASSERT_TRUE(setup_test_user_process(&proc, "mmap_gap", 201) == 0,
+                "Test process setup failed");
+
+    ASSERT_TRUE(process_add_vma(&proc, USER_MMAP_START, USER_MMAP_START + PAGE_SIZE, VM_READ | VM_WRITE | VM_USER) == 0,
+                "Failed to add first VMA");
+    ASSERT_TRUE(process_add_vma(&proc, USER_MMAP_START + (3 * PAGE_SIZE), USER_MMAP_START + (4 * PAGE_SIZE), VM_READ | VM_WRITE | VM_USER) == 0,
+                "Failed to add second VMA");
+
+    process_set_current(&proc);
+    clear_errno();
+    ASSERT_TRUE(sys_mmap(NULL, PAGE_SIZE * 2, PROT_READ | PROT_WRITE, 0, -1, 0) == USER_MMAP_START + PAGE_SIZE,
+                "sys_mmap should choose the first gap large enough for the whole mapping");
+    ASSERT_TRUE(get_errno() == THUNDEROS_OK,
+                "sys_mmap should clear errno on success");
+
+    process_set_current(saved_process);
+    cleanup_test_user_process(&proc);
+
+    TEST_PASS();
+}
+
+static void test_munmap_rejects_partial_vma(void) {
+    TEST_START("sys_munmap rejects partial VMA unmaps");
+
+    struct process *saved_process = process_current();
+    struct process proc;
+    uint64_t mapped_addr;
+
+    ASSERT_TRUE(setup_test_user_process(&proc, "munmap_partial", 202) == 0,
+                "Test process setup failed");
+
+    process_set_current(&proc);
+    mapped_addr = sys_mmap(NULL, PAGE_SIZE * 2, PROT_READ | PROT_WRITE, 0, -1, 0);
+    ASSERT_TRUE(mapped_addr != (uint64_t)-1, "sys_mmap should create the backing VMA");
+
+    clear_errno();
+    ASSERT_TRUE(sys_munmap((void *)mapped_addr, PAGE_SIZE) == (uint64_t)-1,
+                "sys_munmap should reject partial VMA removal");
+    ASSERT_TRUE(get_errno() == THUNDEROS_EINVAL,
+                "sys_munmap should set EINVAL for unsupported partial unmaps");
+    ASSERT_TRUE(process_find_vma(&proc, mapped_addr + PAGE_SIZE) != NULL,
+                "Partial munmap failure should leave the original VMA intact");
+
+    ASSERT_TRUE(sys_munmap((void *)mapped_addr, PAGE_SIZE * 2) == 0,
+                "sys_munmap should still allow exact VMA removal");
+
+    process_set_current(saved_process);
+    cleanup_test_user_process(&proc);
+
+    TEST_PASS();
+}
+
 void run_syscall_errno_tests(void) {
     struct process *saved_process = process_current();
 
@@ -357,6 +449,8 @@ void run_syscall_errno_tests(void) {
     test_process_set_tty_invalid_sets_einval();
     test_process_get_tty_null_sets_einval();
     test_process_get_tty_clears_errno_on_success();
+    test_mmap_chooses_first_fitting_gap();
+    test_munmap_rejects_partial_vma();
 
     process_set_current(saved_process);
 

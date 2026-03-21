@@ -920,6 +920,12 @@ uint64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, uint64
         set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
+
+    uint64_t map_length = (length + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    if (map_length < length || map_length == 0) {
+        set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
     
     (void)fd;      // TODO: Implement file-backed mappings
     (void)offset;  // TODO: Implement file offset
@@ -928,19 +934,30 @@ uint64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, uint64
     // Determine mapping address
     uint64_t map_addr;
     if (addr) {
-        map_addr = (uint64_t)addr;
+        map_addr = (uint64_t)addr & ~(PAGE_SIZE - 1);
     } else {
-        // Find free space in user address space (simple allocator)
+        // Find a gap large enough for the full requested mapping.
         map_addr = USER_MMAP_START;
-        
-        // Search for free region
+
         vm_area_t *vma = proc->vm_areas;
         while (vma) {
-            if (map_addr >= vma->start && map_addr < vma->end) {
-                map_addr = vma->end;
+            if (vma->end <= map_addr) {
+                vma = vma->next;
+                continue;
             }
+
+            if (map_addr + map_length <= vma->start) {
+                break;
+            }
+
+            map_addr = (vma->end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
             vma = vma->next;
         }
+    }
+
+    if (map_addr >= KERNEL_VIRT_BASE || map_length > (KERNEL_VIRT_BASE - map_addr)) {
+        set_errno(THUNDEROS_ENOMEM);
+        return SYSCALL_ERROR;
     }
     
     // Convert protection flags
@@ -953,6 +970,8 @@ uint64_t sys_mmap(void *addr, size_t length, int prot, int flags, int fd, uint64
     if (process_map_region(proc, map_addr, length, vm_flags) != 0) {
         return SYSCALL_ERROR;
     }
+
+    clear_errno();
     
     return map_addr;
 }
@@ -970,13 +989,24 @@ uint64_t sys_munmap(void *addr, size_t length) {
         set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;
     }
+
+    uint64_t raw_addr = (uint64_t)addr;
+    uint64_t raw_end = raw_addr + length;
+    if (raw_end < raw_addr) {
+        set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
     
-    uint64_t start = (uint64_t)addr & ~(PAGE_SIZE - 1);
-    uint64_t end = ((uint64_t)addr + length + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    uint64_t start = raw_addr & ~(PAGE_SIZE - 1);
+    uint64_t end = (raw_end + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    if (end < start) {
+        set_errno(THUNDEROS_EINVAL);
+        return SYSCALL_ERROR;
+    }
     
     // Find and remove VMA
     vm_area_t *vma = process_find_vma(proc, start);
-    if (!vma || vma->start != start) {
+    if (!vma || vma->start != start || vma->end != end) {
         set_errno(THUNDEROS_EINVAL);
         return SYSCALL_ERROR;  // Address not start of mapping
     }
