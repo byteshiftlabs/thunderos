@@ -31,6 +31,16 @@ OPT_LEVEL ?= -O0
 DEBUG_SYMBOLS ?= 1
 QEMU_ACCEL_FLAGS ?= -accel tcg,thread=multi
 QEMU_EXTRA_FLAGS ?=
+OPT_VARIANT := $(patsubst -%,%,$(OPT_LEVEL))
+DEBUG_VARIANT := $(if $(filter 1,$(DEBUG_SYMBOLS)),dbg,nodebug)
+BUILD_VARIANT := $(OPT_VARIANT)-$(DEBUG_VARIANT)
+ifeq ($(ENABLE_TESTS),1)
+BUILD_VARIANT := $(BUILD_VARIANT)-tests
+endif
+ifeq ($(TEST_MODE),1)
+BUILD_VARIANT := $(BUILD_VARIANT)-testmode
+endif
+OBJ_DIR := $(BUILD_DIR)/obj/$(BUILD_VARIANT)
 
 # Compiler flags
 CFLAGS := -march=rv64gc -mabi=lp64d -mcmodel=medany
@@ -84,10 +94,10 @@ TEST_ASM_OBJS :=
 KERNEL_ASM_SOURCES := $(sort $(KERNEL_ASM_SOURCES))
 
 # Object files
-BOOT_OBJS := $(patsubst $(BOOT_DIR)/%.S,$(BUILD_DIR)/boot/%.o,$(filter %.S,$(BOOT_SOURCES))) \
-             $(patsubst $(BOOT_DIR)/%.c,$(BUILD_DIR)/boot/%.o,$(filter %.c,$(BOOT_SOURCES)))
-KERNEL_C_OBJS := $(patsubst %.c,$(BUILD_DIR)/%.o,$(KERNEL_C_SOURCES))
-KERNEL_ASM_OBJS := $(patsubst %.S,$(BUILD_DIR)/%.o,$(KERNEL_ASM_SOURCES))
+BOOT_OBJS := $(patsubst $(BOOT_DIR)/%.S,$(OBJ_DIR)/boot/%.o,$(filter %.S,$(BOOT_SOURCES))) \
+			 $(patsubst $(BOOT_DIR)/%.c,$(OBJ_DIR)/boot/%.o,$(filter %.c,$(BOOT_SOURCES)))
+KERNEL_C_OBJS := $(patsubst %.c,$(OBJ_DIR)/%.o,$(KERNEL_C_SOURCES))
+KERNEL_ASM_OBJS := $(patsubst %.S,$(OBJ_DIR)/%.o,$(KERNEL_ASM_SOURCES))
 
 # Remove duplicates
 ALL_OBJS := $(sort $(BOOT_OBJS) $(KERNEL_C_OBJS) $(KERNEL_ASM_OBJS) $(TEST_ASM_OBJS))
@@ -178,19 +188,19 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 	@$(OBJCOPY) -O binary $< $@
 
 # Compile C sources
-$(BUILD_DIR)/%.o: %.c
+$(OBJ_DIR)/%.o: %.c
 	@echo "$(BOLD)$(CYAN)[CC]$(RESET)   $<"
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile test assembly programs
-$(BUILD_DIR)/tests/%.o: tests/%.S
+$(OBJ_DIR)/tests/%.o: tests/%.S
 	@echo "$(BOLD)$(CYAN)[AS]$(RESET)   $<"
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 # Compile assembly sources
-$(BUILD_DIR)/%.o: %.S
+$(OBJ_DIR)/%.o: %.S
 	@echo "$(BOLD)$(CYAN)[AS]$(RESET)   $<"
 	@mkdir -p $(dir $@)
 	@$(CC) $(CFLAGS) -c $< -o $@
