@@ -1101,7 +1101,11 @@ int ext2_remove_file(ext2_fs_t *fs, uint32_t dir_inode_num, const char *name) {
         file_inode.i_dtime = 1;  /* Non-zero deletion time */
         
         /* Write updated inode before freeing */
-        ext2_write_inode(fs, file_inode_num, &file_inode);
+        ret = ext2_write_inode(fs, file_inode_num, &file_inode);
+        if (ret < 0) {
+            /* errno already set by ext2_write_inode */
+            return -1;
+        }
         
         /* Free the inode */
         ret = ext2_free_inode(fs, file_inode_num);
@@ -1213,7 +1217,11 @@ int ext2_remove_dir(ext2_fs_t *fs, uint32_t dir_inode_num, const char *name) {
     target_inode.i_links_count = 0;
     
     /* Write updated inode */
-    ext2_write_inode(fs, target_inode_num, &target_inode);
+    ret = ext2_write_inode(fs, target_inode_num, &target_inode);
+    if (ret < 0) {
+        /* errno already set by ext2_write_inode */
+        return -1;
+    }
     
     /* Free the inode */
     ret = ext2_free_inode(fs, target_inode_num);

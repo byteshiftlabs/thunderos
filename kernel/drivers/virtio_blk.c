@@ -37,6 +37,8 @@ static void virtqueue_notify(virtio_blk_device_t *dev, uint32_t queue_idx);
 static void virtqueue_cleanup(virtqueue_t *vq);
 static void virtqueue_reset_state(virtqueue_t *vq);
 static int virtio_blk_recover_queue(virtio_blk_device_t *dev);
+static void virtio_blk_ack_interrupts(virtio_blk_device_t *dev);
+static int virtio_blk_check_runtime_status(virtio_blk_device_t *dev);
 
 /**
  * Initialize virtqueue with descriptor, available, and used rings
@@ -212,6 +214,43 @@ static int virtio_blk_recover_queue(virtio_blk_device_t *dev)
 
     uint32_t final_status = VIRTIO_READ32(dev, VIRTIO_MMIO_STATUS);
     if (!(final_status & VIRTIO_STATUS_DRIVER_OK)) {
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_BADDEV);
+    }
+
+    clear_errno();
+    return 0;
+}
+
+/**
+ * Acknowledge any pending device interrupts after ring state has been observed.
+ */
+static void virtio_blk_ack_interrupts(virtio_blk_device_t *dev)
+{
+    uint32_t int_status = VIRTIO_READ32(dev, VIRTIO_MMIO_INTERRUPT_STATUS);
+    if (!int_status) {
+        return;
+    }
+
+    read_barrier();
+    VIRTIO_WRITE32(dev, VIRTIO_MMIO_INTERRUPT_ACK, int_status);
+    write_barrier();
+}
+
+/**
+ * Detect device fault states during request processing.
+ */
+static int virtio_blk_check_runtime_status(virtio_blk_device_t *dev)
+{
+    uint32_t status = VIRTIO_READ32(dev, VIRTIO_MMIO_STATUS);
+
+    if (status & VIRTIO_STATUS_DEVICE_NEEDS_RESET) {
+        if (virtio_blk_recover_queue(dev) < 0) {
+            return -1;
+        }
+        RETURN_ERRNO(THUNDEROS_EVIRTIO_RESET);
+    }
+
+    if (status & VIRTIO_STATUS_FAILED) {
         RETURN_ERRNO(THUNDEROS_EVIRTIO_BADDEV);
     }
 
@@ -410,20 +449,24 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
     /* Add to available ring and notify device */
     virtqueue_add_to_avail(vq, desc_idx);
     virtqueue_notify(dev, 0);
+
+    /* Polling starts from a clean errno state so queue-corruption errors are distinguishable from "not completed yet". */
+    clear_errno();
     
     /* Poll for completion (synchronous for now) */
     uint32_t timeout = 1000000;
     
     while (timeout > 0) {
-        /* Check and acknowledge interrupt status even in polling mode */
-        uint32_t int_status = VIRTIO_READ32(dev, VIRTIO_MMIO_INTERRUPT_STATUS);
-        if (int_status) {
-            VIRTIO_WRITE32(dev, VIRTIO_MMIO_INTERRUPT_ACK, int_status);
+        if (virtio_blk_check_runtime_status(dev) < 0) {
+            return -1;
         }
-        
+
         uint16_t used_idx;
         uint32_t len;
-        if (virtqueue_get_used_buf(vq, &used_idx, &len) == 0) {
+        int used_result = virtqueue_get_used_buf(vq, &used_idx, &len);
+        if (used_result == 0) {
+            virtio_blk_ack_interrupts(dev);
+
             if (virtqueue_free_desc_chain(vq, used_idx) < 0) {
                 return -1;
             }
@@ -435,6 +478,13 @@ static int virtio_blk_do_request(virtio_blk_device_t *dev, virtio_blk_request_t 
             clear_errno();
             return sectors;
         }
+
+        if (used_result < 0 && get_errno() != 0) {
+            return -1;
+        }
+
+        virtio_blk_ack_interrupts(dev);
+
         timeout--;
     }
     
@@ -690,12 +740,11 @@ void virtio_blk_irq_handler(void)
     if (!g_blk_device) {
         return;
     }
-    
-    /* Read and acknowledge interrupt */
-    uint32_t int_status = VIRTIO_READ32(g_blk_device, VIRTIO_MMIO_INTERRUPT_STATUS);
-    VIRTIO_WRITE32(g_blk_device, VIRTIO_MMIO_INTERRUPT_ACK, int_status);
-    
-    /* TODO: Process used buffers asynchronously */
+
+    /* Requests are completed synchronously in the polling path; the IRQ path
+     * only quiesces the line without reordering ring visibility.
+     */
+    virtio_blk_ack_interrupts(g_blk_device);
 }
 
 /**
