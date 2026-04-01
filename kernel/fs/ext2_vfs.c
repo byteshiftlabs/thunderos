@@ -123,6 +123,12 @@ static vfs_node_t *ext2_vfs_lookup(vfs_node_t *dir, const char *name) {
         /* errno already set by ext2_read_inode */
         return NULL;
     }
+
+    if (inode->i_dtime != 0 || inode->i_links_count == 0) {
+        kfree(inode);
+        set_errno(THUNDEROS_EFS_BADDIR);
+        return NULL;
+    }
     
     /* Create VFS node */
     vfs_node_t *node = (vfs_node_t *)kmalloc(sizeof(vfs_node_t));
