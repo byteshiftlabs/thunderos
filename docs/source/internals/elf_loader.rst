@@ -49,39 +49,18 @@ An ELF file consists of:
 ELF Header
 ~~~~~~~~~~
 
-.. code-block:: c
-
-    #define ELF_MAGIC   0x464C457F  // 0x7F 'E' 'L' 'F'
-    
-    struct elf64_header {
-        uint32_t e_ident_magic;     // Magic number
-        uint8_t  e_ident_class;     // 32-bit or 64-bit (2 = 64-bit)
-        uint8_t  e_ident_data;      // Endianness (1 = little, 2 = big)
-        uint8_t  e_ident_version;   // ELF version (1)
-        uint8_t  e_ident_osabi;     // OS/ABI (0 = System V)
-        uint8_t  e_ident_pad[8];    // Padding
-        uint16_t e_type;            // Object file type
-        uint16_t e_machine;         // Architecture
-        uint32_t e_version;         // Version
-        uint64_t e_entry;           // Entry point address
-        uint64_t e_phoff;           // Program header table offset
-        uint64_t e_shoff;           // Section header table offset
-        uint32_t e_flags;           // Processor-specific flags
-        uint16_t e_ehsize;          // ELF header size
-        uint16_t e_phentsize;       // Program header entry size
-        uint16_t e_phnum;           // Number of program headers
-        uint16_t e_shentsize;       // Section header entry size
-        uint16_t e_shnum;           // Number of section headers
-        uint16_t e_shstrndx;        // Section header string table index
-    };
+.. literalinclude:: ../../../kernel/core/elf_loader.c
+   :language: c
+   :lines: 16-53
+   :caption: ELF constants plus the header and program-header layouts used by the loader
 
 **Key Fields:**
 
-- ``e_ident_magic``: Must be ``0x464C457F`` (bytes: 0x7F, 'E', 'L', 'F')
-- ``e_machine``: ``0xF3`` (``EM_RISCV``) for RISC-V architecture
-- ``e_entry``: Virtual address to start execution (e.g., ``0x10000``)
-- ``e_phoff``: Byte offset of program header table in file
-- ``e_phnum``: Number of program headers (typically 2-4)
+- ``magic``: Must be ``0x464C457F`` (bytes: 0x7F, 'E', 'L', 'F')
+- ``machine``: ``0xF3`` (``EM_RISCV``) for RISC-V architecture
+- ``entry``: Virtual address to start execution (e.g., ``0x10000``)
+- ``phoff``: Byte offset of program header table in file
+- ``phnum``: Number of program headers (typically 2-4)
 
 **ELF Machine Types:**
 
@@ -110,36 +89,18 @@ ThunderOS loads ``ET_EXEC`` (statically linked executables) only. Dynamic linkin
 
 **Validation Example:**
 
-.. code-block:: c
-
-    // Validate ELF header
-    if (header->e_ident_magic != ELF_MAGIC) {
-        RETURN_ERRNO(THUNDEROS_EELF_MAGIC);
-    }
-    if (header->e_machine != EM_RISCV) {
-        RETURN_ERRNO(THUNDEROS_EELF_ARCH);  // Wrong architecture
-    }
-    if (header->e_type != ET_EXEC) {
-        RETURN_ERRNO(THUNDEROS_EELF_TYPE);  // Not executable
-    }
+.. literalinclude:: ../../../kernel/core/elf_loader.c
+   :language: c
+   :lines: 74-97
+   :caption: Live ELF header validation in the loader
 
 Program Header
 ~~~~~~~~~~~~~~
 
 Describes a segment to load into memory:
 
-.. code-block:: c
-
-    struct elf64_program_header {
-        uint32_t p_type;      // Segment type
-        uint32_t p_flags;     // Segment flags (read/write/execute)
-        uint64_t p_offset;    // File offset
-        uint64_t p_vaddr;     // Virtual address to load at
-        uint64_t p_paddr;     // Physical address (ignored)
-        uint64_t p_filesz;    // Size in file (bytes to read)
-        uint64_t p_memsz;     // Size in memory (may be larger for .bss)
-        uint64_t p_align;     // Alignment (must be power of 2)
-    };
+The loader uses the ``elf64_phdr_t`` layout shown above and treats ``PT_LOAD``
+segments as the executable image to map into the new process address space.
 
 **Segment Types:**
 

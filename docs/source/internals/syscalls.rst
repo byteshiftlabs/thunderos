@@ -8,7 +8,7 @@ System calls (syscalls) provide the interface between user-space programs and th
 
 **Current Status:**
 
-ThunderOS v0.10.0 implements **45 system calls** covering process management, I/O, filesystem operations, signals, memory management, inter-process communication, process creation, directory navigation, terminal control, file descriptor manipulation, file permissions, and system control.
+ThunderOS v0.9.0 exposes the syscall ABI defined in ``include/kernel/syscall.h``. The current surface covers process management, I/O, filesystem operations, signals, memory management, inter-process communication, synchronization primitives, networking, terminal control, file descriptor manipulation, file permissions, and system control.
 
 **Key Features:**
 
@@ -26,10 +26,10 @@ ThunderOS v0.10.0 implements **45 system calls** covering process management, I/
 
 **System Call Limits:**
 
-.. code-block:: c
-
-    #define SYSCALL_MAX_PATH  4096  /* Maximum path length (4KB) */
-    #define SYSCALL_MAX_ARGC  256   /* Maximum argument count for execve */
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 6-8
+   :caption: Syscall boundary limits used by the kernel
 
 These limits prevent buffer overflow attacks and excessive resource consumption during syscall parameter validation:
 
@@ -1670,8 +1670,8 @@ Future optimization: Implement true copy-on-write to reduce memory duplication.
 
 **See Also:**
 
-- :doc:`process` - Process management implementation
-- :doc:`scheduler` - Process scheduling
+- :doc:`process_management` - Process management implementation
+- Scheduler internals are implemented in ``kernel/core/scheduler.c``
 - :doc:`memory` - Virtual memory and paging
 - ``sys_waitpid`` - Wait for child to terminate
 - ``sys_execve`` - Replace process image with new program
@@ -2058,7 +2058,7 @@ Each process has:
 - **Effective UID/GID**: Used for permission checks (can differ for setuid programs)
 
 sys_getuid (37)
-^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~
 
 Get the real user ID of the calling process.
 
@@ -2082,7 +2082,7 @@ Returns the real user ID of the calling process. In ThunderOS, all processes cur
    printf("Real UID: %d\n", uid);
 
 sys_getgid (38)
-^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~
 
 Get the real group ID of the calling process.
 
@@ -2099,7 +2099,7 @@ Get the real group ID of the calling process.
 Returns the real group ID of the calling process. In ThunderOS, all processes currently start with GID 0 (root).
 
 sys_geteuid (39)
-^^^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~~~
 
 Get the effective user ID of the calling process.
 
@@ -2116,7 +2116,7 @@ Get the effective user ID of the calling process.
 Returns the effective user ID, which is used for permission checks. For setuid programs, this may differ from the real UID.
 
 sys_chmod (41)
-^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~
 
 Change file permissions.
 
@@ -2172,7 +2172,7 @@ Change file permissions.
    chmod("/etc/config", 0444);  // r--r--r--
 
 sys_chown (42)
-^^^^^^^^^^^^^^
+~~~~~~~~~~~~~~
 
 Change file owner and group.
 

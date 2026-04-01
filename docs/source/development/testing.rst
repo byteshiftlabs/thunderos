@@ -293,22 +293,12 @@ Testing System Calls
 
 User programs test the syscall interface:
 
-**Available Syscalls (13 implemented):**
+**Current syscall definitions:**
 
-.. code-block:: c
-
-   SYS_EXIT    = 0   // Exit process
-   SYS_WRITE   = 1   // Write to file descriptor
-   SYS_READ    = 2   // Read from file descriptor
-   SYS_OPEN    = 13  // Open file
-   SYS_CLOSE   = 14  // Close file descriptor
-   SYS_GETPID  = 3   // Get process ID
-   SYS_FORK    = 4   // Fork process
-   SYS_EXECVE  = 11  // Execute program
-   SYS_WAITPID = 7   // Wait for child
-   SYS_BRK     = 8   // Expand heap
-   SYS_KILL    = 11  // Send signal
-   SYS_SIGNAL  = 21  // Install signal handler
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 12-80
+   :caption: Current ThunderOS syscall number assignments
 
 **Example Test (signal_test.c):**
 

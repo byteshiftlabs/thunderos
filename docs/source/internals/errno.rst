@@ -18,16 +18,10 @@ Error Code Ranges
 
 Error codes are organized into ranges by subsystem:
 
-.. code-block:: c
-
-   /* Error Code Ranges */
-   0       : Success (THUNDEROS_OK)
-   1-29    : Generic POSIX-style errors
-   30-49   : Filesystem errors
-   50-69   : ELF loader errors
-   70-89   : VirtIO/driver errors
-   90-109  : Process/scheduler errors
-   110-129 : Memory management errors
+.. literalinclude:: ../../../include/kernel/errno.h
+    :language: c
+    :lines: 11-20
+    :caption: ThunderOS errno subsystem ranges
 
 Common Error Codes
 ------------------
@@ -35,54 +29,34 @@ Common Error Codes
 Generic Errors (POSIX-Compatible)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-   #define THUNDEROS_OK          0   /* Success */
-   #define THUNDEROS_EPERM       1   /* Operation not permitted */
-   #define THUNDEROS_ENOENT      2   /* No such file or directory */
-   #define THUNDEROS_EIO         5   /* I/O error */
-   #define THUNDEROS_EBADF       9   /* Bad file descriptor */
-   #define THUNDEROS_ENOMEM      12  /* Out of memory */
-   #define THUNDEROS_EACCES      13  /* Permission denied */
-   #define THUNDEROS_EBUSY       16  /* Device or resource busy */
-   #define THUNDEROS_EEXIST      17  /* File exists */
-   #define THUNDEROS_ENOTDIR     20  /* Not a directory */
-   #define THUNDEROS_EISDIR      21  /* Is a directory */
-   #define THUNDEROS_EINVAL      22  /* Invalid argument */
-   #define THUNDEROS_EMFILE      24  /* Too many open files */
-   #define THUNDEROS_ENOSPC      28  /* No space left on device */
-   #define THUNDEROS_ERANGE      34  /* Result too large / buffer too small */
-   #define THUNDEROS_ENOTEMPTY   39  /* Directory not empty */
+.. literalinclude:: ../../../include/kernel/errno.h
+    :language: c
+    :lines: 22-57
+    :caption: Generic ThunderOS errno values
 
 Filesystem Errors
 ~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-   #define THUNDEROS_EFS_CORRUPT 30  /* Filesystem corruption detected */
-   #define THUNDEROS_EFS_INVAL   31  /* Invalid filesystem structure */
-   #define THUNDEROS_EFS_BADBLK  32  /* Bad block number */
-   #define THUNDEROS_EFS_NOINODE 33  /* No free inodes */
-   #define THUNDEROS_EFS_NOBLK   34  /* No free blocks */
-   #define THUNDEROS_EFS_NOTMNT  41  /* Filesystem not mounted */
+.. literalinclude:: ../../../include/kernel/errno.h
+    :language: c
+    :lines: 59-71
+    :caption: Filesystem-specific errno values
 
 ELF Loader Errors
 ~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-   #define THUNDEROS_EELF_MAGIC  50  /* Invalid ELF magic number */
-   #define THUNDEROS_EELF_ARCH   54  /* Wrong architecture (not RISC-V) */
-   #define THUNDEROS_EELF_TYPE   55  /* Wrong ELF type (not executable) */
-   #define THUNDEROS_EELF_NOPHDR 59  /* No program headers */
+.. literalinclude:: ../../../include/kernel/errno.h
+    :language: c
+    :lines: 73-84
+    :caption: ELF loader errno values
 
 Process Errors
 ~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-   #define THUNDEROS_EPROC_LIMIT  90  /* Process limit reached */
-   #define THUNDEROS_EPROC_INIT   95  /* Process initialization failed */
+.. literalinclude:: ../../../include/kernel/errno.h
+    :language: c
+    :lines: 97-104
+    :caption: Process and scheduler errno values
 
 Per-Process errno
 -----------------
