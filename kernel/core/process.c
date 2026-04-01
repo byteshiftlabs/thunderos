@@ -71,6 +71,7 @@ void process_init(void) {
     init_proc->cwd[0] = '/';
     init_proc->cwd[1] = '\0';
     init_proc->controlling_tty = 0;  /* Kernel console (VT1) */
+    vfs_init_file_table(init_proc->fd_table);
     init_proc->uid = 0;              /* root user */
     init_proc->gid = 0;              /* root group */
     init_proc->euid = 0;             /* effective root */
@@ -122,7 +123,10 @@ static struct process *alloc_process(void) {
     for (int i = 0; i < MAX_PROCS; i++) {
         if (process_table[i].state == PROC_UNUSED) {
             // Mark slot as being allocated to prevent race conditions
+            kmemset(&process_table[i], 0, sizeof(struct process));
             process_table[i].state = PROC_EMBRYO;
+            process_table[i].pid = -1;
+            process_table[i].controlling_tty = -1;
             lock_release(&process_lock);
             return &process_table[i];
         }
@@ -158,6 +162,8 @@ void process_free(struct process *proc) {
     if (!proc) return;
     
     lock_acquire(&process_lock);
+
+    vfs_release_file_table(proc->fd_table);
     
     // Clean up VMAs first
     process_cleanup_vmas(proc);
@@ -309,6 +315,7 @@ struct process *process_create(const char *name, void (*entry_point)(void *), vo
     proc->cwd[0] = '/';
     proc->cwd[1] = '\0';
     proc->controlling_tty = current_process ? current_process->controlling_tty : 0;
+    vfs_init_file_table(proc->fd_table);
     
     // Inherit uid/gid from parent process (or default to root)
     if (current_process) {
@@ -655,6 +662,10 @@ pid_t process_fork(struct trap_frame *current_tf) {
     child->exit_code = 0;
     child->errno_value = 0;
     child->controlling_tty = parent->controlling_tty;  /* Inherit parent's TTY */
+    if (vfs_clone_file_table(child->fd_table, parent->fd_table) != 0) {
+        process_free(child);
+        return -1;
+    }
     
     /* Inherit uid/gid from parent */
     child->uid = parent->uid;
@@ -944,6 +955,7 @@ struct process *process_create_user(const char *name, void *user_code, size_t co
     proc->cwd[0] = '/';
     proc->cwd[1] = '\0';
     proc->controlling_tty = current_process ? current_process->controlling_tty : 0;
+    vfs_init_file_table(proc->fd_table);
     
     // Inherit uid/gid from parent process (or default to root)
     if (current_process) {
@@ -1115,6 +1127,7 @@ struct process *process_create_elf(const char *name, uint64_t code_base,
     proc->cwd[0] = '/';
     proc->cwd[1] = '\0';
     proc->controlling_tty = current_process ? current_process->controlling_tty : 0;
+    vfs_init_file_table(proc->fd_table);
     
     // Inherit uid/gid from parent process (or default to root)
     if (current_process) {

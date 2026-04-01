@@ -11,6 +11,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+struct pipe;
+
 /* Maximum number of open files per process */
 #define VFS_MAX_OPEN_FILES 16
 
@@ -106,6 +108,7 @@ typedef struct vfs_node {
     uint32_t size;                     /* File size in bytes */
     uint32_t type;                     /* File type (file/dir) */
     uint32_t flags;                    /* Flags */
+    uint32_t ref_count;                /* Open-handle references */
     uint16_t mode;                     /* Permission bits (from inode i_mode) */
     uint16_t uid;                      /* Owner user ID */
     uint16_t gid;                      /* Owner group ID */
@@ -166,6 +169,9 @@ int vfs_normalize_path(const char *path, char *normalized, size_t size);
 int vfs_alloc_fd(void);
 void vfs_free_fd(int fd);
 vfs_file_t *vfs_get_file(int fd);
+void vfs_init_file_table(vfs_file_t *file_table);
+int vfs_clone_file_table(vfs_file_t *dst, vfs_file_t *src);
+void vfs_release_file_table(vfs_file_t *file_table);
 
 /* Helper functions */
 int vfs_stat(const char *path, uint32_t *size, uint32_t *type);

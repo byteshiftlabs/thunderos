@@ -22,8 +22,8 @@
  * Global state
  * ======================================================================== */
 
-/* Global file descriptor table (per-process would be better, but global for now) */
-static vfs_file_t g_file_table[VFS_MAX_OPEN_FILES];
+/* Boot-time fallback descriptor table used before a current process exists. */
+static vfs_file_t g_boot_file_table[VFS_MAX_OPEN_FILES];
 
 /* Root filesystem */
 static vfs_filesystem_t *g_root_fs = NULL;
@@ -35,6 +35,10 @@ static vfs_filesystem_t *g_root_fs = NULL;
 static int normalize_build_absolute(const char *path, char *working, size_t working_size);
 static int normalize_resolve_components(const char *working, char *normalized, size_t size);
 static int vfs_is_persistent_node(vfs_node_t *node);
+static vfs_file_t *vfs_current_file_table(void);
+static void vfs_reset_fd_entry(vfs_file_t *file_table, int fd);
+static void vfs_retain_file(vfs_file_t *file);
+static int vfs_close_in_table(vfs_file_t *file_table, int fd);
 
 /* ========================================================================
  * Path normalization helpers
@@ -188,8 +192,99 @@ static int vfs_is_persistent_node(vfs_node_t *node) {
     return node && g_root_fs && node == g_root_fs->root;
 }
 
+static vfs_file_t *vfs_current_file_table(void) {
+    struct process *proc = process_current();
+    if (proc) {
+        return proc->fd_table;
+    }
+    return g_boot_file_table;
+}
+
+static void vfs_reset_fd_entry(vfs_file_t *file_table, int fd) {
+    file_table[fd].in_use = 0;
+    file_table[fd].node = NULL;
+    file_table[fd].pos = 0;
+    file_table[fd].flags = 0;
+    file_table[fd].pipe = NULL;
+    file_table[fd].type = VFS_TYPE_FILE;
+}
+
+static void vfs_retain_node(vfs_node_t *node) {
+    if (!node || vfs_is_persistent_node(node)) {
+        return;
+    }
+
+    node->ref_count++;
+}
+
+static void vfs_retain_pipe(pipe_t *pipe, uint32_t flags) {
+    if (!pipe) {
+        return;
+    }
+
+    if ((flags & O_RDWR) == O_RDWR) {
+        pipe->read_ref_count++;
+        pipe->write_ref_count++;
+    } else if (flags & O_WRONLY) {
+        pipe->write_ref_count++;
+    } else {
+        pipe->read_ref_count++;
+    }
+}
+
+static void vfs_retain_file(vfs_file_t *file) {
+    if (!file || !file->in_use) {
+        return;
+    }
+
+    if (file->type == VFS_TYPE_PIPE) {
+        vfs_retain_pipe((pipe_t *)file->pipe, file->flags);
+        return;
+    }
+
+    vfs_retain_node(file->node);
+}
+
+static int vfs_close_in_table(vfs_file_t *file_table, int fd) {
+    vfs_file_t *file = &file_table[fd];
+
+    if (!file->in_use) {
+        RETURN_ERRNO(THUNDEROS_EBADF);
+    }
+
+    if (file->type == VFS_TYPE_PIPE && file->pipe) {
+        pipe_t *pipe = (pipe_t *)file->pipe;
+
+        if ((file->flags & O_RDWR) == O_RDWR) {
+            pipe_close_read(pipe);
+            pipe_close_write(pipe);
+        } else if (file->flags & O_WRONLY) {
+            pipe_close_write(pipe);
+        } else {
+            pipe_close_read(pipe);
+        }
+
+        if (pipe_can_free(pipe)) {
+            pipe_free(pipe);
+        }
+    }
+
+    if (file->node) {
+        vfs_release_node(file->node);
+    }
+
+    vfs_reset_fd_entry(file_table, fd);
+    clear_errno();
+    return 0;
+}
+
 void vfs_release_node(vfs_node_t *node) {
     if (!node || vfs_is_persistent_node(node)) {
+        return;
+    }
+
+    if (node->ref_count > 1) {
+        node->ref_count--;
         return;
     }
 
@@ -245,20 +340,7 @@ int vfs_normalize_path(const char *path, char *normalized, size_t size) {
  * Initialize VFS
  */
 int vfs_init(void) {
-    /* Initialize file descriptor table */
-    for (int i = 0; i < VFS_MAX_OPEN_FILES; i++) {
-        g_file_table[i].node = NULL;
-        g_file_table[i].flags = 0;
-        g_file_table[i].pos = 0;
-        g_file_table[i].in_use = 0;
-        g_file_table[i].pipe = NULL;
-        g_file_table[i].type = VFS_TYPE_FILE;
-    }
-    
-    /* Reserve stdin/stdout/stderr */
-    g_file_table[VFS_FD_STDIN].in_use = 1;
-    g_file_table[VFS_FD_STDOUT].in_use = 1;
-    g_file_table[VFS_FD_STDERR].in_use = 1;
+    vfs_init_file_table(g_boot_file_table);
     
     g_root_fs = NULL;
     
@@ -287,14 +369,16 @@ int vfs_mount_root(vfs_filesystem_t *fs) {
  * Allocate a file descriptor
  */
 int vfs_alloc_fd(void) {
+    vfs_file_t *file_table = vfs_current_file_table();
+
     for (int i = VFS_FD_FIRST_REGULAR; i < VFS_MAX_OPEN_FILES; i++) {
-        if (!g_file_table[i].in_use) {
-            g_file_table[i].in_use = 1;
-            g_file_table[i].node = NULL;
-            g_file_table[i].pos = 0;
-            g_file_table[i].flags = 0;
-            g_file_table[i].pipe = NULL;
-            g_file_table[i].type = VFS_TYPE_FILE;
+        if (!file_table[i].in_use) {
+            file_table[i].in_use = 1;
+            file_table[i].node = NULL;
+            file_table[i].pos = 0;
+            file_table[i].flags = 0;
+            file_table[i].pipe = NULL;
+            file_table[i].type = VFS_TYPE_FILE;
             clear_errno();
             return i;
         }
@@ -307,13 +391,10 @@ int vfs_alloc_fd(void) {
  * Free a file descriptor
  */
 void vfs_free_fd(int fd) {
+    vfs_file_t *file_table = vfs_current_file_table();
+
     if (fd >= 0 && fd < VFS_MAX_OPEN_FILES) {
-        g_file_table[fd].in_use = 0;
-        g_file_table[fd].node = NULL;
-        g_file_table[fd].pos = 0;
-        g_file_table[fd].flags = 0;
-        g_file_table[fd].pipe = NULL;
-        g_file_table[fd].type = VFS_TYPE_FILE;
+        vfs_reset_fd_entry(file_table, fd);
     }
 }
 
@@ -327,6 +408,8 @@ void vfs_free_fd(int fd) {
  * @return newfd on success, -1 on error
  */
 int vfs_dup2(int oldfd, int newfd) {
+    vfs_file_t *file_table = vfs_current_file_table();
+
     /* Validate newfd range */
     if (newfd < 0 || newfd >= VFS_MAX_OPEN_FILES) {
         set_errno(THUNDEROS_EINVAL);
@@ -334,7 +417,7 @@ int vfs_dup2(int oldfd, int newfd) {
     }
     
     /* Get the source file */
-    if (oldfd < 0 || oldfd >= VFS_MAX_OPEN_FILES || !g_file_table[oldfd].in_use) {
+    if (oldfd < 0 || oldfd >= VFS_MAX_OPEN_FILES || !file_table[oldfd].in_use) {
         set_errno(THUNDEROS_EBADF);
         return -1;
     }
@@ -345,8 +428,8 @@ int vfs_dup2(int oldfd, int newfd) {
         return newfd;
     }
     
-    vfs_file_t *old_file = &g_file_table[oldfd];
-    vfs_file_t *new_file = &g_file_table[newfd];
+    vfs_file_t *old_file = &file_table[oldfd];
+    vfs_file_t *new_file = &file_table[newfd];
     
     /* Close newfd if it's open */
     if (new_file->in_use) {
@@ -360,8 +443,7 @@ int vfs_dup2(int oldfd, int newfd) {
     new_file->in_use = 1;
     new_file->pipe = old_file->pipe;
     new_file->type = old_file->type;
-    
-    /* Note: Pipe reference counting is handled by vfs_close */
+    vfs_retain_file(new_file);
     
     clear_errno();
     return newfd;
@@ -371,11 +453,66 @@ int vfs_dup2(int oldfd, int newfd) {
  * Get file structure from descriptor
  */
 vfs_file_t *vfs_get_file(int fd) {
-    if (fd < 0 || fd >= VFS_MAX_OPEN_FILES || !g_file_table[fd].in_use) {
+    vfs_file_t *file_table = vfs_current_file_table();
+
+    if (fd < 0 || fd >= VFS_MAX_OPEN_FILES || !file_table[fd].in_use) {
         set_errno(THUNDEROS_EBADF);
         return NULL;
     }
-    return &g_file_table[fd];
+    return &file_table[fd];
+}
+
+void vfs_init_file_table(vfs_file_t *file_table) {
+    if (!file_table) {
+        return;
+    }
+
+    for (int i = 0; i < VFS_MAX_OPEN_FILES; i++) {
+        file_table[i].node = NULL;
+        file_table[i].flags = 0;
+        file_table[i].pos = 0;
+        file_table[i].in_use = 0;
+        file_table[i].pipe = NULL;
+        file_table[i].type = VFS_TYPE_FILE;
+    }
+
+    file_table[VFS_FD_STDIN].in_use = 1;
+    file_table[VFS_FD_STDOUT].in_use = 1;
+    file_table[VFS_FD_STDERR].in_use = 1;
+}
+
+int vfs_clone_file_table(vfs_file_t *dst, vfs_file_t *src) {
+    if (!dst || !src) {
+        RETURN_ERRNO(THUNDEROS_EINVAL);
+    }
+
+    vfs_init_file_table(dst);
+
+    for (int i = 0; i < VFS_MAX_OPEN_FILES; i++) {
+        if (!src[i].in_use) {
+            continue;
+        }
+
+        dst[i] = src[i];
+        vfs_retain_file(&dst[i]);
+    }
+
+    clear_errno();
+    return 0;
+}
+
+void vfs_release_file_table(vfs_file_t *file_table) {
+    if (!file_table) {
+        return;
+    }
+
+    for (int i = VFS_FD_FIRST_REGULAR; i < VFS_MAX_OPEN_FILES; i++) {
+        if (file_table[i].in_use) {
+            (void)vfs_close_in_table(file_table, i);
+        }
+    }
+
+    vfs_init_file_table(file_table);
 }
 /**
  * vfs_resolve_path - Resolve a path to a VFS node
@@ -474,6 +611,8 @@ vfs_node_t *vfs_resolve_path(const char *path) {
  * Open a file
  */
 int vfs_open(const char *path, uint32_t flags) {
+    vfs_file_t *file_table = vfs_current_file_table();
+
     if (!path) {
         hal_uart_puts("vfs: NULL path\n");
         RETURN_ERRNO(THUNDEROS_EINVAL);
@@ -555,9 +694,9 @@ int vfs_open(const char *path, uint32_t flags) {
     }
     
     /* Initialize file descriptor */
-    g_file_table[fd].node = node;
-    g_file_table[fd].flags = flags;
-    g_file_table[fd].pos = 0;
+    file_table[fd].node = node;
+    file_table[fd].flags = flags;
+    file_table[fd].pos = 0;
     
     /* Call filesystem open if available */
     if (node->ops && node->ops->open) {
@@ -577,7 +716,7 @@ int vfs_open(const char *path, uint32_t flags) {
     
     /* If O_APPEND, seek to end */
     if (flags & O_APPEND) {
-        g_file_table[fd].pos = node->size;
+        file_table[fd].pos = node->size;
     }
     
     clear_errno();
@@ -588,38 +727,13 @@ int vfs_open(const char *path, uint32_t flags) {
  * Close a file
  */
 int vfs_close(int fd) {
-    vfs_file_t *file = vfs_get_file(fd);
-    if (!file) {
-        /* errno already set by vfs_get_file */
-        return -1;
+    vfs_file_t *file_table = vfs_current_file_table();
+
+    if (fd < 0 || fd >= VFS_MAX_OPEN_FILES || !file_table[fd].in_use) {
+        RETURN_ERRNO(THUNDEROS_EBADF);
     }
-    
-    /* Handle pipe close */
-    if (file->type == VFS_TYPE_PIPE && file->pipe) {
-        pipe_t *pipe = (pipe_t*)file->pipe;
-        
-        /* Close appropriate end based on flags */
-        if (file->flags & O_RDONLY) {
-            pipe_close_read(pipe);
-        } else if (file->flags & O_WRONLY) {
-            pipe_close_write(pipe);
-        }
-        
-        /* Free pipe if both ends closed */
-        if (pipe_can_free(pipe)) {
-            pipe_free(pipe);
-        }
-    }
-    
-    /* Call filesystem close if available */
-    if (file->node) {
-        vfs_release_node(file->node);
-    }
-    
-    /* Free the file descriptor */
-    vfs_free_fd(fd);
-    clear_errno();
-    return 0;
+
+    return vfs_close_in_table(file_table, fd);
 }
 
 /**
@@ -1167,6 +1281,8 @@ int vfs_chown(const char *path, uint16_t uid, uint16_t gid) {
  * @return 0 on success, -1 on error
  */
 int vfs_create_pipe(int pipefd[2]) {
+    vfs_file_t *file_table = vfs_current_file_table();
+
     if (!pipefd) {
         RETURN_ERRNO(THUNDEROS_EINVAL);
     }
@@ -1196,18 +1312,18 @@ int vfs_create_pipe(int pipefd[2]) {
     }
     
     /* Set up read end (pipefd[0]) */
-    g_file_table[read_fd].pipe = pipe;
-    g_file_table[read_fd].type = VFS_TYPE_PIPE;
-    g_file_table[read_fd].flags = O_RDONLY;
-    g_file_table[read_fd].node = NULL;
-    g_file_table[read_fd].pos = 0;
+    file_table[read_fd].pipe = pipe;
+    file_table[read_fd].type = VFS_TYPE_PIPE;
+    file_table[read_fd].flags = O_RDONLY;
+    file_table[read_fd].node = NULL;
+    file_table[read_fd].pos = 0;
     
     /* Set up write end (pipefd[1]) */
-    g_file_table[write_fd].pipe = pipe;
-    g_file_table[write_fd].type = VFS_TYPE_PIPE;
-    g_file_table[write_fd].flags = O_WRONLY;
-    g_file_table[write_fd].node = NULL;
-    g_file_table[write_fd].pos = 0;
+    file_table[write_fd].pipe = pipe;
+    file_table[write_fd].type = VFS_TYPE_PIPE;
+    file_table[write_fd].flags = O_WRONLY;
+    file_table[write_fd].node = NULL;
+    file_table[write_fd].pos = 0;
     
     /* Return file descriptors */
     pipefd[0] = read_fd;

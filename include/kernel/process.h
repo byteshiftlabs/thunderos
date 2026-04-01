@@ -12,6 +12,7 @@
 #include <stddef.h>
 #include "trap.h"
 #include "mm/paging.h"
+#include "fs/vfs.h"
 
 // Forward declaration
 typedef uint64_t sigset_t;
@@ -142,6 +143,9 @@ struct process {
     
     // Console multiplexing
     int controlling_tty;                // Controlling terminal index (-1 = none)
+
+    // Per-process file descriptor namespace
+    vfs_file_t fd_table[VFS_MAX_OPEN_FILES];
 };
 
 /**
