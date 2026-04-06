@@ -161,6 +161,13 @@ All syscalls validate user-provided pointers before dereferencing:
 Available Syscalls
 ------------------
 
+The live kernel syscall helper surface is declared in the public ABI header:
+
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 132-193
+   :caption: Current syscall helper declarations in include/kernel/syscall.h
+
 Process Management
 ~~~~~~~~~~~~~~~~~~
 
@@ -169,9 +176,9 @@ sys_exit (0)
 
 Terminate the current process.
 
-.. code-block:: c
-
-   void sys_exit(int status);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 132-132
 
 **Parameters:**
 
@@ -212,9 +219,9 @@ sys_getpid (3)
 
 Get the current process ID.
 
-.. code-block:: c
-
-   int sys_getpid(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 136-136
 
 **Parameters:**
 
@@ -252,9 +259,9 @@ sys_getppid (10)
 
 Get the parent process ID.
 
-.. code-block:: c
-
-   int sys_getppid(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 141-141
 
 **Parameters:**
 
@@ -287,9 +294,9 @@ sys_yield (6)
 
 Yield CPU to the scheduler.
 
-.. code-block:: c
-
-   int sys_yield(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 139-139
 
 **Parameters:**
 
@@ -327,9 +334,9 @@ sys_sleep (5)
 
 Sleep for specified milliseconds.
 
-.. code-block:: c
-
-   int sys_sleep(uint64_t milliseconds);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 138-138
 
 **Parameters:**
 
@@ -358,16 +365,16 @@ Sleep for specified milliseconds.
 
 **Current Implementation:**
 
-Just calls ``process_yield()`` once. TODO: Implement proper timer-based sleep.
+The kernel converts milliseconds into timer ticks, temporarily enables supervisor interrupts for the sleep window, and uses ``wfi`` until the target tick count is reached.
 
 sys_kill (11)
 ^^^^^^^^^^^^^
 
 Send signal to process.
 
-.. code-block:: c
-
-   int sys_kill(int pid, int signal);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 142-142
 
 **Parameters:**
 
@@ -398,9 +405,9 @@ Send signal to process.
        kill(42, SIGTERM);  // Terminate process 42
    }
 
-**Current Limitation:**
+**Current Implementation:**
 
-Returns ``-1`` (not fully implemented - requires process lookup and signal handling).
+The kernel validates the PID, resolves the target process from the process table, and forwards the signal to ``signal_send()``.
 
 Input/Output
 ~~~~~~~~~~~~
@@ -410,9 +417,9 @@ sys_write (1)
 
 Write data to a file descriptor.
 
-.. code-block:: c
-
-   ssize_t sys_write(int fd, const char *buf, size_t count);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 134-134
 
 **Parameters:**
 
@@ -458,9 +465,9 @@ sys_read (2)
 
 Read data from a file descriptor.
 
-.. code-block:: c
-
-   ssize_t sys_read(int fd, char *buf, size_t count);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 135-135
 
 **Parameters:**
 
@@ -496,9 +503,9 @@ Read data from a file descriptor.
        // Process n bytes...
    }
 
-**Current Limitation:**
+**Current Implementation:**
 
-Always returns ``0`` (EOF). Requires input buffering implementation.
+stdin reads are routed through the active virtual terminal or UART fallback, and regular file descriptors are dispatched through VFS.
 
 Time Management
 ~~~~~~~~~~~~~~~
@@ -508,9 +515,9 @@ sys_gettime (12)
 
 Get system time in milliseconds since boot.
 
-.. code-block:: c
-
-   uint64_t sys_gettime(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 143-143
 
 **Parameters:**
 
@@ -554,9 +561,9 @@ sys_sbrk (4)
 
 Adjust process heap size.
 
-.. code-block:: c
-
-   void *sys_sbrk(int increment);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 137-137
 
 **Parameters:**
 
@@ -597,9 +604,9 @@ sys_waitpid (9)
 
 Wait for a child process to change state (terminate).
 
-.. code-block:: c
-
-   pid_t sys_waitpid(int pid, int *wstatus, int options);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 133-133
 
 **Parameters:**
 
@@ -653,9 +660,9 @@ sys_open (13)
 
 Open a file and return a file descriptor.
 
-.. code-block:: c
-
-   int sys_open(const char *path, int flags, int mode);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 144-144
 
 **Parameters:**
 
@@ -703,9 +710,9 @@ sys_close (14)
 
 Close an open file descriptor.
 
-.. code-block:: c
-
-   int sys_close(int fd);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 145-145
 
 **Parameters:**
 
@@ -740,9 +747,9 @@ sys_lseek (15)
 
 Reposition read/write file offset.
 
-.. code-block:: c
-
-   int64_t sys_lseek(int fd, int64_t offset, int whence);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 146-146
 
 **Parameters:**
 
@@ -787,9 +794,9 @@ sys_stat (16)
 
 Get file status information.
 
-.. code-block:: c
-
-   int sys_stat(const char *path, struct stat *statbuf);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 147-147
 
 **Parameters:**
 
@@ -835,9 +842,9 @@ sys_mkdir (17)
 
 Create a new directory.
 
-.. code-block:: c
-
-   int sys_mkdir(const char *path, int mode);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 148-148
 
 **Parameters:**
 
@@ -875,9 +882,9 @@ sys_unlink (18)
 
 Remove a file (delete).
 
-.. code-block:: c
-
-   int sys_unlink(const char *path);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 149-149
 
 **Parameters:**
 
@@ -913,9 +920,9 @@ sys_rmdir (19)
 
 Remove an empty directory.
 
-.. code-block:: c
-
-   int sys_rmdir(const char *path);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 150-150
 
 **Parameters:**
 
@@ -952,9 +959,9 @@ sys_execve (20)
 
 Execute a program loaded from the filesystem.
 
-.. code-block:: c
-
-   int sys_execve(const char *path, const char *argv[], const char *envp[]);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 151-151
 
 **Parameters:**
 
@@ -1007,9 +1014,9 @@ sys_signal (21)
 
 Install a signal handler (simplified interface).
 
-.. code-block:: c
-
-   void (*sys_signal(int signum, void (*handler)(int)))(int);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 152-152
 
 **Parameters:**
 
@@ -1056,10 +1063,9 @@ sys_sigaction (22)
 
 Advanced signal handling with signal masks and flags.
 
-.. code-block:: c
-
-   int sys_sigaction(int signum, const struct sigaction *act, 
-                     struct sigaction *oldact);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 153-153
 
 **Parameters:**
 
@@ -1083,9 +1089,9 @@ sys_sigreturn (23)
 
 Return from a signal handler (restore context).
 
-.. code-block:: c
-
-   int sys_sigreturn(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 154-154
 
 **Parameters:**
 
@@ -1105,10 +1111,9 @@ sys_mmap (24)
 
 Map memory into the process address space.
 
-.. code-block:: c
-
-   void *sys_mmap(void *addr, size_t length, int prot, int flags, 
-                  int fd, uint64_t offset);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 155-155
 
 **Parameters:**
 
@@ -1180,9 +1185,9 @@ sys_munmap (25)
 
 Unmap a previously mapped memory region.
 
-.. code-block:: c
-
-   int sys_munmap(void *addr, size_t length);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 156-156
 
 **Parameters:**
 
@@ -1227,9 +1232,9 @@ sys_pipe (26)
 
 **Prototype:**
 
-.. code-block:: c
-
-   int sys_pipe(int pipefd[2]);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 157-157
 
 **Description:**
 
@@ -1324,9 +1329,9 @@ sys_getdents (27)
 
 Read directory entries from a directory file descriptor.
 
-.. code-block:: c
-
-   ssize_t sys_getdents(int fd, void *dirp, size_t count);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 159-159
 
 **Parameters:**
 
@@ -1400,9 +1405,9 @@ sys_chdir (28)
 
 Change the current working directory of the calling process.
 
-.. code-block:: c
-
-   int sys_chdir(const char *path);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 160-160
 
 **Parameters:**
 
@@ -1444,18 +1449,18 @@ Change the current working directory of the calling process.
 4. Updates process cwd field
 5. Returns success
 
-**Current Limitation:**
+**Current Implementation:**
 
-Only absolute paths are supported. Relative paths (e.g., ``..``, ``subdir``) are not yet resolved.
+``sys_chdir()`` normalizes both absolute and relative paths via ``vfs_normalize_path()`` before resolving the target directory.
 
 sys_getcwd (29)
 ^^^^^^^^^^^^^^^
 
 Get the current working directory of the calling process.
 
-.. code-block:: c
-
-   char *sys_getcwd(char *buf, size_t size);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 161-161
 
 **Parameters:**
 
@@ -1502,13 +1507,9 @@ Get the current working directory of the calling process.
 
 Each process maintains its own current working directory in the ``cwd`` field of its process structure:
 
-.. code-block:: c
-
-   struct process {
-       // ...
-       char cwd[256];  // Current working directory
-       // ...
-   };
+.. literalinclude:: ../../../include/kernel/process.h
+   :language: c
+   :lines: 141-149
 
 The cwd is:
 
@@ -1522,9 +1523,9 @@ sys_fork (7)
 
 **Prototype:**
 
-.. code-block:: c
-
-   pid_t sys_fork(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 140-140
 
 **Description:**
 
@@ -1842,9 +1843,9 @@ sys_gettty (31)
 
 Get the controlling terminal number of the calling process.
 
-.. code-block:: c
-
-   int sys_gettty(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 163-163
 
 **Return Value:**
 
@@ -1863,9 +1864,9 @@ sys_settty (32)
 
 Set the controlling terminal of the calling process.
 
-.. code-block:: c
-
-   int sys_settty(int tty);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 164-164
 
 **Parameters:**
 
@@ -1888,9 +1889,9 @@ sys_getprocs (33)
 
 Get information about running processes. Used by the ``ps`` utility.
 
-.. code-block:: c
-
-   int sys_getprocs(procinfo_t *procs, int max_procs);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 165-165
 
 **Parameters:**
 
@@ -1904,15 +1905,9 @@ Get information about running processes. Used by the ``ps`` utility.
 
 **Process Info Structure:**
 
-.. code-block:: c
-
-   typedef struct {
-       int pid;           // Process ID
-       int ppid;          // Parent process ID
-       int state;         // Process state (0=READY, 1=RUNNING, 2=SLEEPING)
-       int tty;           // Controlling terminal
-       char name[32];     // Process name
-   } procinfo_t;
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 109-120
 
 **Example:**
 
@@ -1929,9 +1924,9 @@ sys_uname (34)
 
 Get system identification information. Used by the ``uname`` utility.
 
-.. code-block:: c
-
-   int sys_uname(utsname_t *buf);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 166-166
 
 **Parameters:**
 
@@ -1944,15 +1939,9 @@ Get system identification information. Used by the ``uname`` utility.
 
 **Utsname Structure:**
 
-.. code-block:: c
-
-   typedef struct {
-       char sysname[65];     // "ThunderOS"
-       char nodename[65];    // "thunderos"
-       char release[65];     // "0.7.0"
-       char version[65];     // "v0.7.0 Virtual Terminals"
-       char machine[65];     // "riscv64"
-   } utsname_t;
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 122-129
 
 **Example:**
 
@@ -1968,9 +1957,9 @@ sys_dup2 (35)
 
 Duplicate a file descriptor to a specific file descriptor number. Used for I/O redirection and pipe setup.
 
-.. code-block:: c
-
-   int sys_dup2(int oldfd, int newfd);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 158-158
 
 **Parameters:**
 
@@ -2062,9 +2051,9 @@ sys_getuid (37)
 
 Get the real user ID of the calling process.
 
-.. code-block:: c
-
-   uint16_t sys_getuid(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 167-167
 
 **Return Value:**
 
@@ -2086,9 +2075,9 @@ sys_getgid (38)
 
 Get the real group ID of the calling process.
 
-.. code-block:: c
-
-   uint16_t sys_getgid(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 168-168
 
 **Return Value:**
 
@@ -2103,9 +2092,9 @@ sys_geteuid (39)
 
 Get the effective user ID of the calling process.
 
-.. code-block:: c
-
-   uint16_t sys_geteuid(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 169-169
 
 **Return Value:**
 
@@ -2120,9 +2109,9 @@ sys_chmod (41)
 
 Change file permissions.
 
-.. code-block:: c
-
-   int sys_chmod(const char *path, uint32_t mode);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 171-171
 
 **Parameters:**
 
@@ -2176,9 +2165,9 @@ sys_chown (42)
 
 Change file owner and group.
 
-.. code-block:: c
-
-   int sys_chown(const char *path, uint16_t uid, uint16_t gid);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 172-172
 
 **Parameters:**
 
@@ -2222,9 +2211,9 @@ sys_poweroff (200)
 
 Gracefully shutdown the system.
 
-.. code-block:: c
-
-   int sys_poweroff(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 192-192
 
 **Parameters:**
 
@@ -2280,9 +2269,9 @@ sys_reboot (201)
 
 Reboot the system.
 
-.. code-block:: c
-
-   int sys_reboot(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 193-193
 
 **Parameters:**
 
@@ -2356,21 +2345,9 @@ Files
 Syscall Dispatch
 ~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-   uint64_t syscall_handler(uint64_t syscall_num, 
-                           uint64_t arg0, uint64_t arg1, uint64_t arg2,
-                           uint64_t arg3, uint64_t arg4, uint64_t arg5) {
-       switch (syscall_num) {
-           case SYS_EXIT:
-               return sys_exit((int)arg0);
-           case SYS_WRITE:
-               return sys_write((int)arg0, (const char*)arg1, (size_t)arg2);
-           // ... more syscalls ...
-           default:
-               return SYSCALL_ERROR;
-       }
-   }
+.. literalinclude:: ../../../kernel/core/syscall.c
+   :language: c
+   :lines: 2396-2408
 
 See Also
 --------

@@ -18,6 +18,7 @@ ROOT_DIR="${SCRIPT_DIR}/../.."
 BUILD_DIR="${ROOT_DIR}/build"
 OUTPUT_DIR="${SCRIPT_DIR}/../outputs"
 OUTPUT_FILE="${OUTPUT_DIR}/boot_test_output.txt"
+DISK_IMAGE="${BUILD_DIR}/boot_test_fs.img"
 QEMU_TIMEOUT=5
 
 # QEMU 10.1.2+ required for SSTC extension support
@@ -65,9 +66,61 @@ print_test() {
     echo -e "\n${YELLOW}[TEST]${NC} $1"
 }
 
+require_command() {
+    local command_name="$1"
+    local install_hint="$2"
+
+    if command -v "$command_name" >/dev/null 2>&1; then
+        return 0
+    fi
+
+    print_fail "Required command not found: ${command_name}"
+    print_info "${install_hint}"
+    exit 1
+}
+
+create_boot_filesystem() {
+    local fs_root="${BUILD_DIR}/boot_test_fs_contents"
+
+    print_info "Building userland programs..."
+    if make userland >/dev/null 2>&1; then
+        print_pass "Userland build successful"
+    else
+        print_fail "Userland build failed"
+        exit 1
+    fi
+
+    print_info "Creating ext2 filesystem image..."
+    rm -rf "${fs_root}" "${DISK_IMAGE}"
+    mkdir -p "${fs_root}/bin"
+
+    echo "ThunderOS boot test filesystem" > "${fs_root}/README.txt"
+    echo "hello from boot test" > "${fs_root}/hello.txt"
+
+    local required_programs="ush ls cat pwd clear"
+    for prog in ${required_programs}; do
+        if [ ! -f "${ROOT_DIR}/external/userland/build/${prog}" ]; then
+            print_fail "Missing required userland binary: /bin/${prog}"
+            exit 1
+        fi
+        cp "${ROOT_DIR}/external/userland/build/${prog}" "${fs_root}/bin/"
+    done
+
+    if mkfs.ext2 -F -q -d "${fs_root}" "${DISK_IMAGE}" 10M >/dev/null 2>&1; then
+        print_pass "Boot filesystem image created"
+    else
+        print_fail "ext2 filesystem creation failed"
+        exit 1
+    fi
+
+    rm -rf "${fs_root}"
+}
+
 # Build kernel
 print_header "ThunderOS Boot Test"
 print_info "Building kernel..."
+
+require_command mkfs.ext2 "Install e2fsprogs: sudo apt-get install e2fsprogs"
 
 cd "${ROOT_DIR}"
 if make clean >/dev/null 2>&1 && make >/dev/null 2>&1; then
@@ -84,6 +137,8 @@ if [ ! -f "${BUILD_DIR}/thunderos.elf" ]; then
 fi
 print_pass "Kernel ELF verified"
 
+create_boot_filesystem
+
 # Run QEMU
 print_test "Booting kernel in QEMU (${QEMU_TIMEOUT}s timeout)"
 
@@ -94,6 +149,9 @@ timeout $((QEMU_TIMEOUT + 2)) "${QEMU_BIN}" \
     -serial mon:stdio \
     -bios none \
     -kernel "${BUILD_DIR}/thunderos.elf" \
+    -global virtio-mmio.force-legacy=false \
+    -drive file="${DISK_IMAGE}",if=none,format=raw,id=hd0 \
+    -device virtio-blk-device,drive=hd0 \
     </dev/null 2>&1 | tee "${OUTPUT_FILE}" || true
 
 # Analyze output
@@ -149,11 +207,27 @@ else
     FAILED=$((FAILED + 1))
 fi
 
+# Test 7: VirtIO block device and ext2 mount
+if grep -q "\[OK\] ext2 filesystem mounted successfully\|\[OK\] VFS root filesystem mounted" "${OUTPUT_FILE}"; then
+    print_pass "VirtIO block device and filesystem initialized"
+else
+    print_fail "VirtIO block device or filesystem initialization failed"
+    FAILED=$((FAILED + 1))
+fi
+
+# Test 8: User shell launch
+if grep -q "\[OK\] Shell on VT1" "${OUTPUT_FILE}"; then
+    print_pass "User shell launched from filesystem"
+else
+    print_fail "User shell did not launch"
+    FAILED=$((FAILED + 1))
+fi
+
 # Summary
 print_header "Boot Test Summary"
 
 if [ $FAILED -eq 0 ]; then
-    echo -e "${GREEN}✓ All boot tests passed (6/6)${NC}"
+    echo -e "${GREEN}✓ All boot tests passed (8/8)${NC}"
     print_info "Output saved to: ${OUTPUT_FILE}"
     exit 0
 else

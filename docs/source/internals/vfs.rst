@@ -42,21 +42,15 @@ Key Concepts
 ~~~~~~~~~~~~
 
 1. **Mount Points**: Associate filesystem instances with paths (e.g., ``/`` → ext2)
-2. **File Descriptors**: Integer handles for open files (0-63)
+2. **File Descriptors**: Integer handles for open files (0-15 per process)
 3. **VFS Operations**: Standardized function pointers for filesystem operations
 4. **Path Resolution**: Convert absolute paths to filesystem-specific resources
 
 **VFS Constants:**
 
-.. code-block:: c
-
-    #define VFS_MAX_OPEN_FILES    64    /* Maximum simultaneously open files */
-    #define VFS_MAX_PATH          256   /* Maximum path length for VFS */
-    #define VFS_FD_STDIN          0     /* Standard input file descriptor */
-    #define VFS_FD_STDOUT         1     /* Standard output file descriptor */
-    #define VFS_FD_STDERR         2     /* Standard error file descriptor */
-    #define VFS_FD_FIRST_REGULAR  3     /* First available FD for files */
-    #define VFS_DEFAULT_FILE_MODE 0644  /* Default permissions: rw-r--r-- */
+.. literalinclude:: ../../../include/fs/vfs.h
+   :language: c
+   :lines: 16-29
 
 **File Descriptor Allocation:**
 
@@ -68,17 +62,9 @@ File descriptors 0-2 are reserved for standard streams:
 
 Regular files are allocated starting from ``VFS_FD_FIRST_REGULAR`` (3):
 
-.. code-block:: c
-
-    int vfs_alloc_fd(void) {
-        for (int i = VFS_FD_FIRST_REGULAR; i < VFS_MAX_OPEN_FILES; i++) {
-            if (!g_file_table[i].in_use) {
-                g_file_table[i].in_use = 1;
-                return i;
-            }
-        }
-        RETURN_ERRNO(THUNDEROS_EMFILE);  // Too many open files
-    }
+.. literalinclude:: ../../../kernel/fs/vfs.c
+   :language: c
+   :lines: 371-388
 
 **Default File Permissions:**
 
@@ -98,41 +84,18 @@ VFS Node
 
 Represents a mounted filesystem:
 
-.. code-block:: c
-
-    struct vfs_node {
-        char mount_point[256];              // Mount path (e.g., "/", "/mnt")
-        struct vfs_operations *ops;         // Filesystem operations
-        void *fs_data;                      // Filesystem-specific data
-        struct vfs_node *next;              // Linked list of mounts
-    };
+.. literalinclude:: ../../../include/fs/vfs.h
+   :language: c
+   :lines: 102-128
 
 VFS Operations
 ~~~~~~~~~~~~~~
 
 Function pointers for filesystem-specific implementations:
 
-.. code-block:: c
-
-    struct vfs_operations {
-        // File operations
-        int (*open)(void *fs_data, const char *path, int flags);
-        int (*close)(void *fs_data, int fd);
-        ssize_t (*read)(void *fs_data, int fd, void *buffer, size_t size);
-        ssize_t (*write)(void *fs_data, int fd, const void *buffer, size_t size);
-        off_t (*seek)(void *fs_data, int fd, off_t offset, int whence);
-        
-        // Directory operations
-        int (*readdir)(void *fs_data, const char *path,
-                       void (*callback)(const char *name, uint32_t inode));
-        int (*mkdir)(void *fs_data, const char *path, mode_t mode);
-        int (*rmdir)(void *fs_data, const char *path);
-        
-        // File metadata
-        int (*stat)(void *fs_data, const char *path, struct stat *st);
-        int (*unlink)(void *fs_data, const char *path);
-        int (*rename)(void *fs_data, const char *old_path, const char *new_path);
-    };
+.. literalinclude:: ../../../include/fs/vfs.h
+   :language: c
+   :lines: 67-100
 
 Each filesystem implements these operations. For example, ext2 provides:
 
@@ -151,26 +114,15 @@ Each filesystem implements these operations. For example, ext2 provides:
 File Descriptor Table
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-    #define VFS_MAX_FDS 64
-    
-    struct vfs_file {
-        bool in_use;                // Is this FD allocated?
-        struct vfs_node *vfs_node;  // Which filesystem?
-        void *private_data;         // FS-specific file data (e.g., inode)
-        uint64_t offset;            // Current file position
-        int flags;                  // Open flags (O_RDONLY, O_WRONLY, etc.)
-        uint32_t inode_num;         // Inode number (if applicable)
-    };
-    
-    static struct vfs_file vfs_file_table[VFS_MAX_FDS];
+.. literalinclude:: ../../../include/fs/vfs.h
+   :language: c
+   :lines: 130-140
 
 **File Descriptor Allocation:**
 
 - File descriptors 0-2 are reserved (stdin, stdout, stderr)
-- VFS allocates descriptors 3-63 for file operations
-- Process-specific file descriptor tables are not yet implemented (global table)
+- VFS allocates descriptors 3-15 for regular file operations
+- Each process carries its own file descriptor table; the kernel keeps a boot-time fallback table before a current process exists
 
 Core Operations
 ---------------
@@ -308,14 +260,9 @@ Opening a File
 
 **Open Flags:**
 
-.. code-block:: c
-
-    #define O_RDONLY    0x0000  // Read-only
-    #define O_WRONLY    0x0001  // Write-only
-    #define O_RDWR      0x0002  // Read-write
-    #define O_CREAT     0x0100  // Create if not exists
-    #define O_TRUNC     0x0200  // Truncate to zero length
-    #define O_APPEND    0x0400  // Append mode
+.. literalinclude:: ../../../include/fs/vfs.h
+    :language: c
+    :lines: 31-37
 
 Reading from a File
 ~~~~~~~~~~~~~~~~~~~
@@ -424,11 +371,9 @@ Seeking
 
 **Seek Modes:**
 
-.. code-block:: c
-
-    #define SEEK_SET  0  // Offset from beginning
-    #define SEEK_CUR  1  // Offset from current position
-    #define SEEK_END  2  // Offset from end
+.. literalinclude:: ../../../include/fs/vfs.h
+    :language: c
+    :lines: 39-42
 
 Closing a File
 ~~~~~~~~~~~~~~

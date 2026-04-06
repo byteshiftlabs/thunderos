@@ -241,10 +241,6 @@ static inline int ext2_is_valid_dirent(ext2_fs_t *fs, ext2_dirent_t *entry,
         return 0;
     }
 
-    if (entry->name_len > EXT2_NAME_LEN) {
-        return 0;
-    }
-
     if (entry->rec_len < ext2_dirent_required_len(entry->name_len)) {
         return 0;
     }

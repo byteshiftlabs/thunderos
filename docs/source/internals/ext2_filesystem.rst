@@ -8,7 +8,7 @@ ThunderOS implements the ext2 (Second Extended Filesystem) for persistent storag
 
 The implementation consists of two main components:
 
-- **Core ext2 driver** (``kernel/fs/ext2.c``): Handles on-disk structures, block I/O, and inode management
+- **Core ext2 driver** (``kernel/fs/ext2_*.c``): Handles on-disk structures, block I/O, allocation, directories, and inode management
 - **VFS integration** (``kernel/fs/ext2_vfs.c``): Adapts ext2 to ThunderOS's Virtual Filesystem layer
 
 Architecture
@@ -60,39 +60,9 @@ Superblock
 
 The superblock contains global filesystem metadata:
 
-.. code-block:: c
-
-    struct ext2_superblock {
-        uint32_t s_inodes_count;        // Total inodes
-        uint32_t s_blocks_count;        // Total blocks
-        uint32_t s_r_blocks_count;      // Reserved blocks
-        uint32_t s_free_blocks_count;   // Free blocks
-        uint32_t s_free_inodes_count;   // Free inodes
-        uint32_t s_first_data_block;    // First data block (0 or 1)
-        uint32_t s_log_block_size;      // Block size = 1024 << s_log_block_size
-        uint32_t s_log_frag_size;       // Fragment size
-        uint32_t s_blocks_per_group;    // Blocks per block group
-        uint32_t s_frags_per_group;     // Fragments per group
-        uint32_t s_inodes_per_group;    // Inodes per group
-        uint32_t s_mtime;               // Last mount time
-        uint32_t s_wtime;               // Last write time
-        uint16_t s_mnt_count;           // Mount count
-        uint16_t s_max_mnt_count;       // Max mount count before fsck
-        uint16_t s_magic;               // Magic signature (0xEF53)
-        uint16_t s_state;               // Filesystem state
-        uint16_t s_errors;              // Error handling behavior
-        uint16_t s_minor_rev_level;     // Minor revision level
-        uint32_t s_lastcheck;           // Last check time
-        uint32_t s_checkinterval;       // Check interval
-        uint32_t s_creator_os;          // OS that created filesystem
-        uint32_t s_rev_level;           // Revision level
-        uint16_t s_def_resuid;          // Default UID for reserved blocks
-        uint16_t s_def_resgid;          // Default GID for reserved blocks
-        // Extended fields (rev 1+)
-        uint32_t s_first_ino;           // First non-reserved inode
-        uint16_t s_inode_size;          // Inode structure size
-        // ... additional fields
-    };
+.. literalinclude:: ../../../include/fs/ext2.h
+   :language: c
+   :lines: 85-140
 
 **Key Fields:**
 
@@ -109,15 +79,9 @@ The ext2 implementation uses ThunderOS's errno system for error reporting. All e
 
 **ext2-Specific Error Codes:**
 
-.. code-block:: c
-
-    #define THUNDEROS_EFS_CORRUPT   30  /* Filesystem corruption detected */
-    #define THUNDEROS_EFS_INVAL     31  /* Invalid filesystem structure */
-    #define THUNDEROS_EFS_BADBLK    32  /* Invalid block number */
-    #define THUNDEROS_EFS_NOINODE   33  /* No free inodes available */
-    #define THUNDEROS_EFS_NOBLK     34  /* No free blocks available */
-    #define THUNDEROS_EFS_BADINO    35  /* Invalid inode number */
-    #define THUNDEROS_EFS_NOTMNT    41  /* Filesystem not mounted */
+.. literalinclude:: ../../../include/kernel/errno.h
+    :language: c
+    :lines: 60-71
 
 **Common Error Conditions:**
 
@@ -169,54 +133,15 @@ Inode
 
 Inodes store file metadata and block pointers:
 
-.. code-block:: c
-
-    struct ext2_inode {
-        uint16_t i_mode;        // File mode (permissions + type)
-        uint16_t i_uid;         // Owner UID
-        uint32_t i_size;        // File size (low 32 bits)
-        uint32_t i_atime;       // Access time
-        uint32_t i_ctime;       // Creation time
-        uint32_t i_mtime;       // Modification time
-        uint32_t i_dtime;       // Deletion time
-        uint16_t i_gid;         // Group GID
-        uint16_t i_links_count; // Hard link count
-        uint32_t i_blocks;      // 512-byte block count
-        uint32_t i_flags;       // File flags
-        uint32_t i_osd1;        // OS-dependent
-        uint32_t i_block[15];   // Block pointers (see below)
-        uint32_t i_generation;  // File version (for NFS)
-        uint32_t i_file_acl;    // Extended attribute block
-        uint32_t i_dir_acl;     // Directory ACL / size high
-        uint32_t i_faddr;       // Fragment address
-        uint8_t  i_osd2[12];    // OS-dependent
-    };
+.. literalinclude:: ../../../include/fs/ext2.h
+   :language: c
+   :lines: 157-180
 
 **File Mode Bits:**
 
-.. code-block:: c
-
-    #define EXT2_S_IFSOCK   0xC000  // Socket
-    #define EXT2_S_IFLNK    0xA000  // Symbolic link
-    #define EXT2_S_IFREG    0x8000  // Regular file
-    #define EXT2_S_IFBLK    0x6000  // Block device
-    #define EXT2_S_IFDIR    0x4000  // Directory
-    #define EXT2_S_IFCHR    0x2000  // Character device
-    #define EXT2_S_IFIFO    0x1000  // FIFO
-    
-    #define EXT2_S_ISUID    0x0800  // Set UID
-    #define EXT2_S_ISGID    0x0400  // Set GID
-    #define EXT2_S_ISVTX    0x0200  // Sticky bit
-    
-    #define EXT2_S_IRUSR    0x0100  // Owner read
-    #define EXT2_S_IWUSR    0x0080  // Owner write
-    #define EXT2_S_IXUSR    0x0040  // Owner execute
-    #define EXT2_S_IRGRP    0x0020  // Group read
-    #define EXT2_S_IWGRP    0x0010  // Group write
-    #define EXT2_S_IXGRP    0x0008  // Group execute
-    #define EXT2_S_IROTH    0x0004  // Other read
-    #define EXT2_S_IWOTH    0x0002  // Other write
-    #define EXT2_S_IXOTH    0x0001  // Other execute
+.. literalinclude:: ../../../include/fs/ext2.h
+    :language: c
+    :lines: 37-61
 
 Block Addressing
 ~~~~~~~~~~~~~~~~
@@ -247,28 +172,15 @@ Directory Entry
 
 Directories are files containing a linked list of directory entries:
 
-.. code-block:: c
-
-    struct ext2_dir_entry {
-        uint32_t inode;         // Inode number (0 = unused entry)
-        uint16_t rec_len;       // Directory entry length
-        uint8_t  name_len;      // Name length (actual)
-        uint8_t  file_type;     // File type (0=unknown, 1=reg, 2=dir, ...)
-        char     name[255];     // File name (variable length)
-    };
+.. literalinclude:: ../../../include/fs/ext2.h
+   :language: c
+   :lines: 182-192
 
 **File Types:**
 
-.. code-block:: c
-
-    #define EXT2_FT_UNKNOWN     0   // Unknown
-    #define EXT2_FT_REG_FILE    1   // Regular file
-    #define EXT2_FT_DIR         2   // Directory
-    #define EXT2_FT_CHRDEV      3   // Character device
-    #define EXT2_FT_BLKDEV      4   // Block device
-    #define EXT2_FT_FIFO        5   // FIFO
-    #define EXT2_FT_SOCK        6   // Socket
-    #define EXT2_FT_SYMLINK     7   // Symbolic link
+.. literalinclude:: ../../../include/fs/ext2.h
+    :language: c
+    :lines: 64-71
 
 **Entry Layout:**
 

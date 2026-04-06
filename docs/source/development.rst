@@ -564,7 +564,7 @@ For detailed code quality standards, style guidelines, and refactoring principle
 .. toctree::
    :maxdepth: 2
 
-   development/code_quality
+   development/index
 
 License
 -------
