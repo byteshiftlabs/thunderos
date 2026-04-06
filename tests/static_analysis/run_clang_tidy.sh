@@ -1,7 +1,14 @@
 #!/bin/bash
 
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
 # Generate compile_commands.json for clang-tidy
 # This tells clang-tidy the correct compiler flags and include paths
+
+cd "$ROOT_DIR"
 
 INCLUDE_DIR="./include"
 CFLAGS="-march=rv64gc -mabi=lp64d -mcmodel=medany -nostdlib -nostartfiles -ffreestanding -fno-common -O0 -g -Wall -Wextra -I$INCLUDE_DIR"
@@ -15,7 +22,14 @@ EOF
 echo "[" > compile_commands.json
 first=true
 
-for file in $(find kernel external/userland tests -name "*.c" -type f | sort); do
+mapfile -t source_files < <(find kernel external/userland tests -name "*.c" -type f | sort)
+
+if [ "${#source_files[@]}" -eq 0 ]; then
+  echo "❌ No source files found"
+  exit 1
+fi
+
+for file in "${source_files[@]}"; do
     if [ "$first" = false ]; then
         echo "," >> compile_commands.json
     fi
@@ -45,20 +59,27 @@ echo "Running clang-tidy analysis..."
 echo ""
 
 # Run clang-tidy on all files
-find kernel external/userland tests -name "*.c" -type f | sort | xargs clang-tidy --header-filter=".*" 2>&1 | tee clang_tidy_analysis.txt
+printf '%s\n' "${source_files[@]}" | xargs clang-tidy --header-filter=".*" 2>&1 | tee clang_tidy_analysis.txt
+
+error_count=$(grep -Ec '^[^[:space:]].*:[0-9]+:[0-9]+: error:' clang_tidy_analysis.txt || true)
+warning_count=$(grep -Ec '^[^[:space:]].*:[0-9]+:[0-9]+: warning:' clang_tidy_analysis.txt || true)
 
 # Extract summary
 echo ""
 echo "=== ANALYSIS SUMMARY ==="
 echo ""
 echo "Real errors (from source code):"
-grep -E "^\/" clang_tidy_analysis.txt | grep "error:" | wc -l
+echo "$error_count"
 echo ""
 echo "Real warnings (from source code):"
-grep -E "^\/" clang_tidy_analysis.txt | grep "warning:" | wc -l
+echo "$warning_count"
 echo ""
 echo "Unique error types:"
-grep -E "^\/" clang_tidy_analysis.txt | grep "error:" | sed 's/.*\[\(.*\)\].*/\1/' | sort | uniq -c | sort -rn | head -10
+grep -E '^[^[:space:]].*:[0-9]+:[0-9]+: error:' clang_tidy_analysis.txt | sed 's/.*\[\(.*\)\].*/\1/' | sort | uniq -c | sort -rn | head -10 || true
 echo ""
 echo "Unique warning types:"
-grep -E "^\/" clang_tidy_analysis.txt | grep "warning:" | sed 's/.*\[\(.*\)\].*/\1/' | sort | uniq -c | sort -rn | head -10
+grep -E '^[^[:space:]].*:[0-9]+:[0-9]+: warning:' clang_tidy_analysis.txt | sed 's/.*\[\(.*\)\].*/\1/' | sort | uniq -c | sort -rn | head -10 || true
+
+if [ "$error_count" -ne 0 ] || [ "$warning_count" -ne 0 ]; then
+  exit 1
+fi

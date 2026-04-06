@@ -71,24 +71,13 @@ Return Structure
 
 SBI calls return a structured result:
 
-.. code-block:: c
-
-   typedef struct {
-       long error;   // 0 on success, negative error code on failure
-       long value;   // Return value (if applicable)
-   } sbi_ret_t;
+.. literalinclude:: ../../../include/arch/sbi.h
+   :language: c
+   :lines: 37-52
 
 **Common Error Codes:**
 
-.. code-block:: c
-
-   SBI_SUCCESS                =  0
-   SBI_ERR_FAILED             = -1
-   SBI_ERR_NOT_SUPPORTED      = -2
-   SBI_ERR_INVALID_PARAM      = -3
-   SBI_ERR_DENIED             = -4
-   SBI_ERR_INVALID_ADDRESS    = -5
-   SBI_ERR_ALREADY_AVAILABLE  = -6
+The return codes are defined alongside ``sbi_ret_t`` in [include/arch/sbi.h](../../../include/arch/sbi.h).
 
 Implementation
 --------------
@@ -101,10 +90,9 @@ sbi_ecall
 
 Low-level wrapper for SBI calls:
 
-.. code-block:: c
-
-   sbi_ret_t sbi_ecall(long ext, long fid, long arg0, long arg1,
-                       long arg2, long arg3, long arg4, long arg5);
+.. literalinclude:: ../../../include/arch/sbi.h
+   :language: c
+   :lines: 54-58
 
 **Parameters:**
 
@@ -118,23 +106,18 @@ Low-level wrapper for SBI calls:
 
 **Assembly Implementation:**
 
-.. code-block:: c
-
-   asm volatile(
-       "ecall"
-       : "+r"(a0), "+r"(a1)
-       : "r"(a2), "r"(a3), "r"(a4), "r"(a5), "r"(a6), "r"(a7)
-       : "memory"
-   );
+.. literalinclude:: ../../../kernel/arch/riscv64/drivers/sbi.c
+   :language: c
+   :lines: 14-36
 
 sbi_shutdown
 ^^^^^^^^^^^^
 
 Gracefully shutdown the system:
 
-.. code-block:: c
-
-   void sbi_shutdown(void);
+.. literalinclude:: ../../../include/arch/sbi.h
+   :language: c
+   :lines: 60-63
 
 **Shutdown Method Priority:**
 
@@ -162,31 +145,9 @@ Gracefully shutdown the system:
 
 **Implementation:**
 
-.. code-block:: c
-
-   void sbi_shutdown(void)
-   {
-       hal_uart_puts("\n[SBI] Initiating system shutdown...\n");
-       
-       /* Try QEMU test device first */
-       switch_to_kernel_page_table();
-       volatile uint32_t *test_dev = (volatile uint32_t *)QEMU_TEST_DEVICE_ADDR;
-       *test_dev = QEMU_TEST_DEVICE_EXIT_SUCCESS;
-       
-       /* Try SBI SRST extension */
-       sbi_ecall(SBI_EXT_SRST, 0,
-                 SBI_SRST_RESET_TYPE_SHUTDOWN,
-                 SBI_SRST_RESET_REASON_NONE,
-                 0, 0, 0, 0);
-       
-       /* Try legacy shutdown */
-       sbi_ecall(SBI_EXT_LEGACY_SHUTDOWN, 0, 0, 0, 0, 0, 0, 0);
-       
-       /* Last resort: halt CPU */
-       while (1) {
-           asm volatile("wfi");
-       }
-   }
+.. literalinclude:: ../../../kernel/arch/riscv64/drivers/sbi.c
+   :language: c
+   :lines: 50-79
 
 sbi_reboot
 ^^^^^^^^^^

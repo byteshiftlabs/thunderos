@@ -149,7 +149,7 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
                 return 0;
             }
             /* Write updated indirect block */
-            if (write_block(fs->device, inode->i_block[EXT2_IND_BLOCK], 
+            if (write_block(fs->device, inode->i_block[EXT2_IND_BLOCK],
                            indirect_buffer, fs->block_size) != 0) {
                 kfree(indirect_buffer);
                 return 0;
@@ -223,7 +223,7 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
             return 0;
         }
         
-        if (read_block(fs->device, inode->i_block[EXT2_DIND_BLOCK], 
+        if (read_block(fs->device, inode->i_block[EXT2_DIND_BLOCK],
                       dindirect_buffer, fs->block_size) != 0) {
             kfree(dindirect_buffer);
             return 0;
@@ -241,7 +241,7 @@ static uint32_t get_or_alloc_block(ext2_fs_t *fs, ext2_inode_t *inode,
             }
             dindirect_buffer[indirect_index] = indirect_block_num;
             /* Write updated double-indirect block */
-            if (write_block(fs->device, inode->i_block[EXT2_DIND_BLOCK], 
+            if (write_block(fs->device, inode->i_block[EXT2_DIND_BLOCK],
                            dindirect_buffer, fs->block_size) != 0) {
                 kfree(dindirect_buffer);
                 return 0;
@@ -413,6 +413,7 @@ int ext2_write_file(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t offset,
     inode->i_blocks = (total_blocks * fs->block_size) / SECTOR_SIZE;
     
     kfree(block_buffer);
+    clear_errno();
     return bytes_written;
 }
 
@@ -436,6 +437,12 @@ static void strncpy(char *dst, const char *src, uint32_t n) {
         if (src[i] == '\0') {
             break;
         }
+    }
+}
+
+static void copy_inode(ext2_inode_t *dst, const ext2_inode_t *src) {
+    for (uint32_t i = 0; i < sizeof(ext2_inode_t); i++) {
+        ((uint8_t *)dst)[i] = ((const uint8_t *)src)[i];
     }
 }
 
@@ -1078,46 +1085,54 @@ int ext2_remove_file(ext2_fs_t *fs, uint32_t dir_inode_num, const char *name) {
     if ((file_inode.i_mode & EXT2_S_IFMT) == EXT2_S_IFDIR) {
         RETURN_ERRNO(THUNDEROS_EISDIR);
     }
-    
-    /* Remove directory entry first */
-    ret = remove_dir_entry(fs, &dir_inode, dir_inode_num, name);
+
+    ext2_inode_t original_inode;
+    copy_inode(&original_inode, &file_inode);
+    if (file_inode.i_links_count == 0) {
+        RETURN_ERRNO(THUNDEROS_EFS_BADINO);
+    }
+
+    file_inode.i_links_count--;
+    if (file_inode.i_links_count == 0) {
+        file_inode.i_dtime = 1;
+    }
+
+    ret = ext2_write_inode(fs, file_inode_num, &file_inode);
     if (ret < 0) {
-        /* errno already set by remove_dir_entry */
+        /* errno already set by ext2_write_inode */
         return -1;
     }
     
-    /* Decrement link count */
-    file_inode.i_links_count--;
-    
-    /* If no more links, free the file's data blocks and inode */
+    /* Remove directory entry once the inode update is durable. */
+    ret = remove_dir_entry(fs, &dir_inode, dir_inode_num, name);
+    if (ret < 0) {
+        /* Best-effort rollback to restore the original inode state. */
+        if (ext2_write_inode(fs, file_inode_num, &original_inode) < 0) {
+            /* errno already set by ext2_write_inode */
+            return -1;
+        }
+
+        /* errno already set by remove_dir_entry */
+        return -1;
+    }
+
+    /* If no more links, reclaim data blocks after the delete marker is on disk. */
     if (file_inode.i_links_count == 0) {
-        /* Free all data blocks */
         ret = free_inode_blocks(fs, &file_inode);
         if (ret < 0) {
-            /* Log error but continue to try freeing inode */
+            /* errno already set by free_inode_blocks */
+            return -1;
         }
-        
-        /* Mark inode as deleted */
-        file_inode.i_dtime = 1;  /* Non-zero deletion time */
-        
-        /* Write updated inode before freeing */
+
         ret = ext2_write_inode(fs, file_inode_num, &file_inode);
         if (ret < 0) {
             /* errno already set by ext2_write_inode */
             return -1;
         }
-        
-        /* Free the inode */
+
         ret = ext2_free_inode(fs, file_inode_num);
         if (ret < 0) {
             /* errno already set by ext2_free_inode */
-            return -1;
-        }
-    } else {
-        /* Just update the link count */
-        ret = ext2_write_inode(fs, file_inode_num, &file_inode);
-        if (ret < 0) {
-            /* errno already set by ext2_write_inode */
             return -1;
         }
     }
@@ -1191,10 +1206,26 @@ int ext2_remove_dir(ext2_fs_t *fs, uint32_t dir_inode_num, const char *name) {
     if (ret == 0) {
         RETURN_ERRNO(THUNDEROS_ENOTEMPTY);
     }
+
+    ext2_inode_t original_target_inode;
+    copy_inode(&original_target_inode, &target_inode);
+    target_inode.i_links_count = 0;
+    target_inode.i_dtime = 1;
+
+    ret = ext2_write_inode(fs, target_inode_num, &target_inode);
+    if (ret < 0) {
+        /* errno already set by ext2_write_inode */
+        return -1;
+    }
     
-    /* Remove directory entry from parent */
+    /* Remove the parent entry after the target inode is durably tombstoned. */
     ret = remove_dir_entry(fs, &parent_inode, dir_inode_num, name);
     if (ret < 0) {
+        if (ext2_write_inode(fs, target_inode_num, &original_target_inode) < 0) {
+            /* errno already set by ext2_write_inode */
+            return -1;
+        }
+
         /* errno already set by remove_dir_entry */
         return -1;
     }
@@ -1206,24 +1237,19 @@ int ext2_remove_dir(ext2_fs_t *fs, uint32_t dir_inode_num, const char *name) {
         /* Log error but continue */
     }
     
-    /* Free the directory's data blocks */
+    /* Reclaim the directory blocks only after the delete marker is on disk. */
     ret = free_inode_blocks(fs, &target_inode);
     if (ret < 0) {
-        /* Log error but continue */
+        /* errno already set by free_inode_blocks */
+        return -1;
     }
-    
-    /* Mark inode as deleted */
-    target_inode.i_dtime = 1;
-    target_inode.i_links_count = 0;
-    
-    /* Write updated inode */
+
     ret = ext2_write_inode(fs, target_inode_num, &target_inode);
     if (ret < 0) {
         /* errno already set by ext2_write_inode */
         return -1;
     }
-    
-    /* Free the inode */
+
     ret = ext2_free_inode(fs, target_inode_num);
     if (ret < 0) {
         /* errno already set by ext2_free_inode */

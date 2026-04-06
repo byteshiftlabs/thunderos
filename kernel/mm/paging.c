@@ -319,7 +319,7 @@ void paging_init(uintptr_t kernel_start, uintptr_t kernel_end) {
  * @param pt Page table to free
  * @param level Current level (2 = root, 0 = leaf)
  */
-static void free_page_table_recursive(page_table_t *pt, int level) {
+static void free_page_table_recursive(page_table_t *pt, int level) { /* NOLINT(misc-no-recursion) */
     if (!pt) return;
     
     // For non-leaf levels, recursively free child page tables

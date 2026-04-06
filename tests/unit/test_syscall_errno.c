@@ -181,6 +181,49 @@ static void test_getpid_clears_errno(void) {
     TEST_PASS();
 }
 
+static void test_getppid_returns_parent_pid(void) {
+    TEST_START("sys_getppid returns parent pid and clears errno");
+
+    struct process *saved_process = process_current();
+    struct process parent;
+    struct process child;
+
+    kmemset(&parent, 0, sizeof(parent));
+    kmemset(&child, 0, sizeof(child));
+    parent.pid = 41;
+    child.pid = 42;
+    child.parent = &parent;
+
+    process_set_current(&child);
+    set_errno(THUNDEROS_EIO);
+    ASSERT_TRUE(sys_getppid() == 41, "sys_getppid should return the parent pid");
+    ASSERT_TRUE(get_errno() == THUNDEROS_OK, "errno should be cleared on success");
+
+    process_set_current(saved_process);
+
+    TEST_PASS();
+}
+
+static void test_getppid_returns_zero_for_init(void) {
+    TEST_START("sys_getppid returns zero for init-like process");
+
+    struct process *saved_process = process_current();
+    struct process init_like;
+
+    kmemset(&init_like, 0, sizeof(init_like));
+    init_like.pid = 1;
+    init_like.parent = NULL;
+
+    process_set_current(&init_like);
+    set_errno(THUNDEROS_EIO);
+    ASSERT_TRUE(sys_getppid() == 0, "sys_getppid should return zero when there is no parent");
+    ASSERT_TRUE(get_errno() == THUNDEROS_OK, "errno should be cleared for the no-parent case");
+
+    process_set_current(saved_process);
+
+    TEST_PASS();
+}
+
 static void test_sbrk_zero_clears_errno(void) {
     TEST_START("sys_sbrk clears stale errno on zero increment");
 
@@ -437,6 +480,8 @@ void run_syscall_errno_tests(void) {
     test_execve_invalid_pointer_sets_efault();
     test_waitpid_invalid_status_pointer_sets_efault();
     test_getpid_clears_errno();
+    test_getppid_returns_parent_pid();
+    test_getppid_returns_zero_for_init();
     test_sbrk_zero_clears_errno();
     test_sleep_zero_clears_errno();
     test_yield_clears_errno();

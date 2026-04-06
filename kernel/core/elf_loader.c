@@ -63,27 +63,27 @@ typedef struct {
 int elf_load_exec(const char *path, const char *argv[], int argc) {
     (void)argv;
     (void)argc;
-    
+
     /* Open file */
     int fd = vfs_open(path, O_RDONLY);
     if (fd < 0) {
         /* errno already set by vfs_open */
         return -1;
     }
-    
+
     /* Read ELF header */
     elf64_ehdr_t ehdr;
     if (vfs_read(fd, &ehdr, sizeof(ehdr)) != sizeof(ehdr)) {
         vfs_close(fd);
         RETURN_ERRNO(THUNDEROS_EIO);
     }
-    
+
     /* Verify ELF magic */
     if (ehdr.magic != ELF_MAGIC) {
         vfs_close(fd);
         RETURN_ERRNO(THUNDEROS_EELF_MAGIC);
     }
-    
+
     /* Verify 64-bit little-endian ELF */
     if (ehdr.class != ELFCLASS64 || ehdr.data != ELFDATA2LSB) {
         vfs_close(fd);

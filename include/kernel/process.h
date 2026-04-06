@@ -1,6 +1,6 @@
 /*
  * Process Management for ThunderOS
- * 
+ *
  * This module provides process creation, scheduling, and context switching
  * for RISC-V architecture.
  */
@@ -285,7 +285,7 @@ pid_t process_fork(struct trap_frame *current_tf);
  * 
  * @param entry_point New entry point
  * @param arg Argument to pass to entry point
- * @return -1 on error (never returns on success)
+ * @return -1 with THUNDEROS_ENOSYS until exec is implemented
  */
 int process_exec(void (*entry_point)(void *), void *arg);
 

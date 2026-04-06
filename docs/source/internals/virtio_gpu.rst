@@ -176,33 +176,9 @@ All GPU commands use descriptor chains:
     │  flags: NEXT     │     │  flags: WRITE    │
     └──────────────────┘     └──────────────────┘
 
-.. code-block:: c
-
-    static int gpu_send_command(void *cmd, size_t cmd_size,
-                                void *resp, size_t resp_size)
-    {
-        // Get physical addresses for DMA
-        uintptr_t cmd_phys = translate_virt_to_phys((uintptr_t)cmd);
-        uintptr_t resp_phys = translate_virt_to_phys((uintptr_t)resp);
-        
-        // Setup descriptor chain
-        desc[0].addr = cmd_phys;
-        desc[0].len = cmd_size;
-        desc[0].flags = VIRTQ_DESC_F_NEXT;
-        desc[0].next = 1;
-        
-        desc[1].addr = resp_phys;
-        desc[1].len = resp_size;
-        desc[1].flags = VIRTQ_DESC_F_WRITE;
-        
-        // Notify device and wait for completion
-        GPU_WRITE32(dev, VIRTIO_MMIO_QUEUE_NOTIFY, QUEUE_CONTROL);
-        
-        // Poll used ring for response
-        while (vq->last_seen_used == vq->used->idx) {
-            // ... timeout handling
-        }
-    }
+.. literalinclude:: ../../../kernel/drivers/virtio_gpu.c
+   :language: c
+   :lines: 124-215
 
 Public API
 ----------
@@ -210,54 +186,30 @@ Public API
 Initialization & Status
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-    // Initialize GPU at MMIO address
-    int virtio_gpu_init(uintptr_t base_addr, uint32_t irq);
-    
-    // Check if GPU is available
-    int virtio_gpu_available(void);
-    
-    // Shutdown GPU
-    void virtio_gpu_shutdown(void);
+.. literalinclude:: ../../../include/drivers/virtio_gpu.h
+  :language: c
+  :lines: 304-319,391-391
 
 Framebuffer Access
 ~~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-    // Direct framebuffer pointer (for bulk operations)
-    uint32_t *virtio_gpu_get_framebuffer(void);
-    
-    // Get framebuffer dimensions
-    void virtio_gpu_get_dimensions(uint32_t *width, uint32_t *height);
-    
-    // Get display info
-    int virtio_gpu_get_display_info(uint32_t *width, uint32_t *height);
+.. literalinclude:: ../../../include/drivers/virtio_gpu.h
+  :language: c
+  :lines: 321-328,378-386
 
 Pixel Operations
 ~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-    // Set pixel (ARGB format)
-    void virtio_gpu_set_pixel(uint32_t x, uint32_t y, uint32_t color);
-    
-    // Get pixel (returns ARGB)
-    uint32_t virtio_gpu_get_pixel(uint32_t x, uint32_t y);
-    
-    // Clear entire framebuffer
-    void virtio_gpu_clear(uint32_t color);
+.. literalinclude:: ../../../include/drivers/virtio_gpu.h
+  :language: c
+  :lines: 330-353
 
 Display Update
 ~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-    // Flush entire framebuffer to display
-    int virtio_gpu_flush(void);
-    
-    // Flush specific region (more efficient)
+.. literalinclude:: ../../../include/drivers/virtio_gpu.h
+  :language: c
+  :lines: 355-369
     int virtio_gpu_flush_region(uint32_t x, uint32_t y,
                                 uint32_t width, uint32_t height);
 

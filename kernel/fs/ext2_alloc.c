@@ -272,6 +272,18 @@ int ext2_free_inode(ext2_fs_t *fs, uint32_t inode_num) {
     if (group >= fs->num_groups) {
         RETURN_ERRNO(THUNDEROS_EFS_BADINO);
     }
+
+    /* Clear the on-disk inode before releasing the bitmap bit so a reused
+     * inode cannot inherit stale metadata or block pointers. */
+    ext2_inode_t cleared_inode;
+    for (uint32_t i = 0; i < sizeof(ext2_inode_t); i++) {
+        ((uint8_t *)&cleared_inode)[i] = 0;
+    }
+
+    if (ext2_write_inode(fs, inode_num, &cleared_inode) != 0) {
+        /* errno already set by ext2_write_inode */
+        return -1;
+    }
     
     ext2_group_desc_t *gd = &fs->group_desc[group];
     

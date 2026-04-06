@@ -28,14 +28,9 @@ DMA Region Structure
 
 Each DMA allocation is tracked using a ``dma_region_t`` structure:
 
-.. code-block:: c
-
-   typedef struct dma_region {
-       void *virt_addr;          // Virtual address (kernel can access)
-       uintptr_t phys_addr;      // Physical address (for device)
-       size_t size;              // Size in bytes (page-aligned)
-       struct dma_region *next;  // Linked list for tracking
-   } dma_region_t;
+.. literalinclude:: ../../../include/mm/dma.h
+   :language: c
+   :lines: 15-33
 
 **Fields:**
 
@@ -66,13 +61,9 @@ Current Identity Mapping Optimization
 
 In ThunderOS v0.3.0, the kernel uses identity mapping where virtual addresses equal physical addresses. This simplifies the DMA allocator implementation:
 
-.. code-block:: c
-
-   // Allocate contiguous physical pages
-   uintptr_t phys_addr = pmm_alloc_pages(num_pages);
-   
-   // Identity mapping: virt == phys
-   void *virt_addr = (void *)phys_addr;
+.. literalinclude:: ../../../kernel/mm/dma.c
+   :language: c
+   :lines: 50-64
 
 **Future Enhancement (v0.4.0+):**
 
@@ -122,10 +113,10 @@ Allocation
    :return: Pointer to DMA region, or NULL on failure
    
    **Flags:**
-   
-   * ``DMA_ZERO`` (0x01): Zero the allocated memory before returning
-   * ``DMA_ALIGN_4K`` (0x02): Align to 4KB boundary (default)
-   * ``DMA_ALIGN_64K`` (0x04): Align to 64KB boundary (some devices)
+
+   .. literalinclude:: ../../../include/mm/dma.h
+      :language: c
+      :lines: 15-20
    
    **Behavior:**
    
@@ -411,14 +402,9 @@ Memory Zeroing
 
 When ``DMA_ZERO`` flag is set, the allocator zeroes memory before returning:
 
-.. code-block:: c
-
-   if (flags & DMA_ZERO) {
-       uint8_t *ptr = (uint8_t *)virt_addr;
-       for (size_t i = 0; i < aligned_size; i++) {
-           ptr[i] = 0;
-       }
-   }
+.. literalinclude:: ../../../kernel/mm/dma.c
+   :language: c
+   :lines: 66-72
 
 **Why zero?**
 
@@ -440,29 +426,9 @@ All allocations are tracked in a linked list for:
 2. **Debugging**: Detect memory leaks
 3. **Cleanup**: Free all regions on driver unload
 
-.. code-block:: c
-
-   static dma_region_t *dma_regions_head = NULL;
-   
-   // Add to list on allocation
-   if (dma_regions_head == NULL) {
-       dma_regions_head = region;
-   } else {
-       // Append to end
-       dma_region_t *current = dma_regions_head;
-       while (current->next != NULL) {
-           current = current->next;
-       }
-       current->next = region;
-   }
-   
-   // Remove from list on free
-   if (dma_regions_head == region) {
-       dma_regions_head = region->next;
-   } else {
-       // Find and unlink
-       ...
-   }
+.. literalinclude:: ../../../kernel/mm/dma.c
+   :language: c
+   :lines: 13-18,90-100,111-132
 
 Error Handling
 ~~~~~~~~~~~~~~
@@ -470,25 +436,16 @@ Error Handling
 The allocator handles two failure modes:
 
 1. **Physical Memory Exhaustion**
-   
-   .. code-block:: c
-   
-      uintptr_t phys_addr = pmm_alloc_pages(num_pages);
-      if (phys_addr == 0) {
-          hal_uart_puts("dma_alloc: failed to allocate physical pages\n");
-          return NULL;
-      }
+
+   .. literalinclude:: ../../../kernel/mm/dma.c
+      :language: c
+      :lines: 54-60
 
 2. **Heap Allocation Failure**
-   
-   .. code-block:: c
-   
-      dma_region_t *region = kmalloc(sizeof(dma_region_t));
-      if (region == NULL) {
-          pmm_free_pages(phys_addr, num_pages);  // Free physical pages
-          hal_uart_puts("dma_alloc: failed to allocate region structure\n");
-          return NULL;
-      }
+
+   .. literalinclude:: ../../../kernel/mm/dma.c
+      :language: c
+      :lines: 74-82
 
 **Important:** On heap failure, physical pages are freed to prevent leaks.
    - size:      8 bytes (size_t)

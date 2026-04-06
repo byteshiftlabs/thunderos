@@ -84,23 +84,22 @@ Define a test case using ``KUNIT_CASE`` macro:
 
 .. code-block:: c
 
-   static void test_example(void) {
-       KUNIT_EXPECT_EQ(2 + 2, 4);
-       KUNIT_EXPECT_NE(1, 0);
-       KUNIT_EXPECT_TRUE(1 == 1);
+    static void test_example(struct kunit_test *test) {
+         KUNIT_EXPECT_EQ(test, 2 + 2, 4);
+         KUNIT_EXPECT_NE(test, 1, 0);
+         KUNIT_EXPECT_TRUE(test, 1 == 1);
    }
    
-   static struct kunit_case example_tests[] = {
+    static struct kunit_test example_tests[] = {
        KUNIT_CASE(test_example),
        KUNIT_CASE(test_another),
-       {}  // Null terminator
    };
 
-The ``KUNIT_CASE`` macro creates a ``struct kunit_case`` entry:
+The ``KUNIT_CASE`` macro creates a ``struct kunit_test`` entry:
 
-.. code-block:: c
-
-   #define KUNIT_CASE(test_func) { .name = #test_func, .run = test_func }
+.. literalinclude:: ../../../tests/framework/kunit.h
+    :language: c
+    :lines: 29-29
 
 Assertion Macros
 ~~~~~~~~~~~~~~~~
@@ -111,45 +110,32 @@ Assertion Macros
 
    * - Macro
      - Description
-   * - ``KUNIT_EXPECT_EQ(a, b)``
-     - Assert that ``a == b``
-   * - ``KUNIT_EXPECT_NE(a, b)``
-     - Assert that ``a != b``
-   * - ``KUNIT_EXPECT_TRUE(cond)``
-     - Assert that ``cond`` is true
-   * - ``KUNIT_EXPECT_FALSE(cond)``
-     - Assert that ``cond`` is false
-   * - ``KUNIT_EXPECT_NULL(ptr)``
-     - Assert that ``ptr == NULL``
-   * - ``KUNIT_EXPECT_NOT_NULL(ptr)``
-     - Assert that ``ptr != NULL``
+    * - ``KUNIT_EXPECT_EQ(test, a, b)``
+       - Assert that ``a == b`` for the current ``struct kunit_test``
+    * - ``KUNIT_EXPECT_NE(test, a, b)``
+       - Assert that ``a != b`` for the current ``struct kunit_test``
+    * - ``KUNIT_EXPECT_TRUE(test, cond)``
+       - Assert that ``cond`` is true
+    * - ``KUNIT_EXPECT_FALSE(test, cond)``
+       - Assert that ``cond`` is false
+    * - ``KUNIT_EXPECT_NULL(test, ptr)``
+       - Assert that ``ptr == NULL``
+    * - ``KUNIT_EXPECT_NOT_NULL(test, ptr)``
+       - Assert that ``ptr != NULL``
 
 Implementation
 ~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-   // tests/framework/kunit.h
-   
-   extern int __kunit_current_test_failed;
-   
-   #define KUNIT_EXPECT_EQ(a, b) do { \
-       if ((a) != (b)) { \
-           uart_puts("  FAIL: Expected "); \
-           uart_puts(#a); \
-           uart_puts(" == "); \
-           uart_puts(#b); \
-           uart_puts("\n"); \
-           __kunit_current_test_failed = 1; \
-       } \
-   } while (0)
+.. literalinclude:: ../../../tests/framework/kunit.h
+   :language: c
+   :lines: 32-39
 
 Each assertion checks the condition and:
 
-* If **true**: Does nothing (test continues)
-* If **false**: Prints error message and sets failure flag
+* If **true**: Does nothing and the test continues
+* If **false**: Stores a failure message and line number in the current test case, then returns immediately
 
-The test continues after a failure (doesn't abort), allowing multiple assertions per test.
+The test returns immediately on a failed expectation, recording the failure message and source line in the current ``struct kunit_test`` entry.
 
 Test Suite Structure
 --------------------
@@ -162,26 +148,25 @@ Defining a Suite
    // tests/test_trap.c
    
    #include "kunit.h"
-   #include "uart.h"
+   #include "hal/hal_uart.h"
    #include "trap.h"
    
    // Individual test functions
-   static void test_trap_initialized(void) {
+   static void test_trap_initialized(struct kunit_test *test) {
        unsigned long stvec;
        asm volatile("csrr %0, stvec" : "=r"(stvec));
-       KUNIT_EXPECT_NE(stvec, 0);
+      KUNIT_EXPECT_NE(test, stvec, 0);
    }
    
-   static void test_basic_arithmetic(void) {
+   static void test_basic_arithmetic(struct kunit_test *test) {
        int result = 2 + 2;
-       KUNIT_EXPECT_EQ(result, 4);
+      KUNIT_EXPECT_EQ(test, result, 4);
    }
    
    // Test case array
-   static struct kunit_case trap_tests[] = {
+   static struct kunit_test trap_tests[] = {
        KUNIT_CASE(test_trap_initialized),
        KUNIT_CASE(test_basic_arithmetic),
-       {}  // Sentinel
    };
    
    // Main function
@@ -194,7 +179,7 @@ Defining a Suite
        uart_puts("   Trap Handler Tests\n");
        uart_puts("=================================\n\n");
        
-       int result = kunit_run_tests(trap_tests);
+      int result = kunit_run_tests(trap_tests, 2);
        
        if (result == 0) {
            uart_puts("\nAll trap tests passed!\n");
@@ -212,63 +197,9 @@ Test Runner
 
 The ``kunit_run_tests()`` function iterates through test cases:
 
-.. code-block:: c
-
-   // tests/framework/kunit.c
-   
-   int __kunit_current_test_failed = 0;
-   
-   int kunit_run_tests(struct kunit_case *test_cases) {
-       int total = 0;
-       int passed = 0;
-       int failed = 0;
-       
-       uart_puts("========================================\n");
-       uart_puts("  KUnit Test Suite - ThunderOS\n");
-       uart_puts("========================================\n\n");
-       
-       // Run each test
-       for (struct kunit_case *test = test_cases; test->run != NULL; test++) {
-           total++;
-           __kunit_current_test_failed = 0;
-           
-           // Print test name
-           uart_puts("[ RUN      ] ");
-           uart_puts(test->name);
-           uart_puts("\n");
-           
-           // Run test function
-           test->run();
-           
-           // Check result
-           if (__kunit_current_test_failed) {
-               uart_puts("[  FAILED  ] ");
-               failed++;
-           } else {
-               uart_puts("[       OK ] ");
-               passed++;
-           }
-           uart_puts(test->name);
-           uart_puts("\n");
-       }
-       
-       // Print summary
-       uart_puts("\n========================================\n");
-       uart_puts("  Test Summary\n");
-       uart_puts("========================================\n");
-       uart_puts("Total:  "); print_decimal(total); uart_puts("\n");
-       uart_puts("Passed: "); print_decimal(passed); uart_puts("\n");
-       uart_puts("Failed: "); print_decimal(failed); uart_puts("\n");
-       
-       if (failed == 0) {
-           uart_puts("\nALL TESTS PASSED\n");
-       } else {
-           uart_puts("\nSOME TESTS FAILED\n");
-       }
-       uart_puts("========================================\n\n");
-       
-       return failed;  // Return number of failures
-   }
+.. literalinclude:: ../../../tests/framework/kunit.c
+   :language: c
+   :lines: 28-92
 
 Data Structures
 ---------------
@@ -280,19 +211,21 @@ Test Case Structure
 
    // tests/framework/kunit.h
    
-   struct kunit_case {
+      struct kunit_test {
        const char *name;           // Test function name (for display)
-       void (*run)(void);          // Test function pointer
+         void (*run)(struct kunit_test *test);  // Test function pointer
+         enum test_status status;
+         const char *failure_msg;
+         int line;
    };
 
 Example usage:
 
 .. code-block:: c
 
-   static struct kunit_case my_tests[] = {
+      static struct kunit_test my_tests[] = {
        { .name = "test_addition", .run = test_addition },
        { .name = "test_subtraction", .run = test_subtraction },
-       { .name = NULL, .run = NULL }  // Sentinel
    };
 
 The ``KUNIT_CASE`` macro simplifies this:
@@ -318,8 +251,8 @@ Example: Testing Timer
 
    // tests/test_timer.c (actual)
    
-   static void test_timer_tick_increments(void) {
-       uart_puts("Waiting for timer interrupt (1 second)...\n");
+      static void test_timer_tick_increments(struct kunit_test *test) {
+         hal_uart_puts("Waiting for timer interrupt (1 second)...\n");
        
        uint64_t start_ticks = clint_get_ticks();
        uint64_t timeout = read_time() + 15000000;
@@ -329,18 +262,18 @@ Example: Testing Timer
            asm volatile("wfi");
            
            if (read_time() > timeout) {
-               uart_puts("ERROR: Timer interrupt did not fire!\n");
-               KUNIT_EXPECT_NE(clint_get_ticks(), start_ticks);
+               hal_uart_puts("ERROR: Timer interrupt did not fire!\n");
+               KUNIT_EXPECT_NE(test, clint_get_ticks(), start_ticks);
                return;
            }
        }
        
        // Print tick count
-       uart_puts("Tick: ");
+         hal_uart_puts("Tick: ");
        print_decimal(clint_get_ticks());
-       uart_puts("\n");
+         hal_uart_puts("\n");
        
-       KUNIT_EXPECT_EQ(clint_get_ticks(), start_ticks + 1);
+         KUNIT_EXPECT_EQ(test, clint_get_ticks(), start_ticks + 1);
    }
 
 

@@ -9,6 +9,7 @@
 #include "kernel/signal.h"
 #include "kernel/errno.h"
 #include "kernel/constants.h"
+#include "arch/interrupt.h"
 #include "drivers/vterm.h"
 #include "mm/pmm.h"
 #include "mm/kmalloc.h"
@@ -820,13 +821,12 @@ pid_t process_fork(struct trap_frame *current_tf) {
 
 /**
  * Execute a new program in the current process
- * TODO: Implement exec
  */
 int process_exec(void (*entry_point)(void *), void *arg) {
-    hal_uart_puts("process_exec: not yet implemented\n");
     (void)entry_point;
     (void)arg;
-    return -1;
+
+    RETURN_ERRNO(THUNDEROS_ENOSYS);
 }
 
 /**
