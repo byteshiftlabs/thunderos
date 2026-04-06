@@ -18,3 +18,4 @@ clang_tidy_analysis.txt
 compile_commands.json
 poweroff
 reboot
+CODEBASE_POLISHING_AUDIT.md
