@@ -357,10 +357,13 @@ Set a signal handler.
    signal(SIGUSR2, SIG_IGN);        // Ignore signal
    signal(SIGTERM, SIG_DFL);        // Restore default
 
-sys_sigaction (stub)
-~~~~~~~~~~~~~~~~~~~~
+sys_sigaction (handler-only)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Advanced signal handling (not yet implemented).
+Install or query a signal action. ThunderOS currently supports only the handler
+field of ``struct sigaction``. Per-handler signal masks (``sa_mask``) and flags
+(``sa_flags``) are not yet supported and must be zero; requests with non-zero
+masks or flags return ``THUNDEROS_ENOSYS``.
 
 **Prototype:**
 
@@ -368,12 +371,17 @@ Advanced signal handling (not yet implemented).
    :language: c
    :lines: 153
 
-**Current Status:** Returns ``THUNDEROS_ENOSYS`` (not implemented).
+**Current Status:** Handler-only subset implemented. Validates user pointers,
+copies the previous handler into ``oldact`` when provided, and installs new
+handlers via ``signal_set_handler()``. Returns ``THUNDEROS_ENOSYS`` only when
+``sa_mask != 0`` or ``sa_flags != 0``.
 
-sys_sigreturn (stub)
-~~~~~~~~~~~~~~~~~~~~
+sys_sigreturn (not yet implemented)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Return from signal handler (not yet implemented).
+Return from a signal handler. The current signal-delivery model uses a simple
+return-to-``sepc`` path and does not yet provide a sigreturn trampoline or full
+interrupted-context restoration ABI.
 
 **Prototype:**
 
@@ -381,7 +389,8 @@ Return from signal handler (not yet implemented).
    :language: c
    :lines: 154
 
-**Current Status:** Returns ``THUNDEROS_ENOSYS`` (not implemented).
+**Current Status:** Returns ``THUNDEROS_ENOSYS``. Will be implemented when
+full signal-frame save/restore is added.
 
 Process Integration
 -------------------
