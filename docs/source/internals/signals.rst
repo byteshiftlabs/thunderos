@@ -26,37 +26,11 @@ ThunderOS supports 32 signals (1-31), following POSIX conventions:
 
 **Termination Signals:**
 
-.. code-block:: c
+.. literalinclude:: ../../../include/kernel/signal.h
+   :language: c
+   :lines: 16-31
 
-   #define SIGHUP      1   // Hangup
-   #define SIGINT      2   // Interrupt (Ctrl+C)
-   #define SIGQUIT     3   // Quit
-   #define SIGILL      4   // Illegal instruction
-   #define SIGABRT     6   // Aborted
-   #define SIGFPE      8   // Floating point exception
-   #define SIGKILL     9   // Kill (cannot be caught or ignored)
-   #define SIGSEGV     11  // Segmentation fault
-   #define SIGPIPE     13  // Broken pipe
-   #define SIGALRM     14  // Alarm clock
-   #define SIGTERM     15  // Termination signal
-
-**User-Defined Signals:**
-
-.. code-block:: c
-
-   #define SIGUSR1     10  // User-defined signal 1
-   #define SIGUSR2     12  // User-defined signal 2
-
-**Process Control Signals:**
-
-.. code-block:: c
-
-   #define SIGCHLD     17  // Child process state changed
-   #define SIGCONT     18  // Continue if stopped
-   #define SIGSTOP     19  // Stop process (cannot be caught or ignored)
-   #define SIGTSTP     20  // Stop from terminal (Ctrl+Z)
-   #define SIGTTIN     21  // Background read from terminal
-   #define SIGTTOU     22  // Background write to terminal
+The same header defines user and process-control signals such as ``SIGUSR1``, ``SIGUSR2``, ``SIGCHLD``, ``SIGCONT``, ``SIGSTOP``, ``SIGTSTP``, ``SIGTTIN``, and ``SIGTTOU``.
 
 **Special Properties:**
 
@@ -69,11 +43,9 @@ Signal Handler Types
 
 ThunderOS defines three special signal handler values:
 
-.. code-block:: c
-
-   #define SIG_DFL     ((void (*)(int))0)  // Default handler
-   #define SIG_IGN     ((void (*)(int))1)  // Ignore signal
-   #define SIG_ERR     ((void (*)(int))-1) // Error return
+.. literalinclude:: ../../../include/kernel/signal.h
+   :language: c
+   :lines: 41-44
 
 **Handler Behavior:**
 
@@ -89,22 +61,15 @@ Process Control Block
 
 Each process has signal-related fields in its PCB:
 
-.. code-block:: c
-
-   struct process {
-       // ... other fields ...
-       
-       // Signal handling
-       sigset_t pending_signals;           // Pending signals (bitmask)
-       sigset_t blocked_signals;           // Blocked signals (bitmask)
-       sighandler_t signal_handlers[NSIG]; // Signal handler functions
-   };
+.. literalinclude:: ../../../include/kernel/process.h
+   :language: c
+   :lines: 136-149
 
 **Signal Set Type:**
 
-.. code-block:: c
-
-   typedef uint64_t sigset_t;  // 64-bit bitmask for 32 signals
+.. literalinclude:: ../../../include/kernel/signal.h
+   :language: c
+   :lines: 46-50
 
 Each bit represents one signal (bit N = signal N).
 
@@ -113,22 +78,15 @@ Signal Action Structure
 
 For advanced signal handling (sigaction syscall):
 
-.. code-block:: c
-
-   struct sigaction {
-       sighandler_t sa_handler;    // Signal handler function
-       sigset_t sa_mask;           // Signals to block during handler
-       int sa_flags;               // Special flags
-   };
+.. literalinclude:: ../../../include/kernel/signal.h
+   :language: c
+   :lines: 52-57
 
 **Flags (currently unused):**
 
-.. code-block:: c
-
-   #define SA_NOCLDSTOP    1       // Don't notify on child stop
-   #define SA_NOCLDWAIT    2       // Don't create zombie on child death
-   #define SA_SIGINFO      4       // Use sa_sigaction instead of sa_handler
-   #define SA_RESTART      8       // Restart syscalls if interrupted
+.. literalinclude:: ../../../include/kernel/signal.h
+   :language: c
+   :lines: 59-63
 
 Signal Delivery Mechanism
 --------------------------
@@ -145,31 +103,9 @@ When a signal is sent via ``sys_kill()`` or ``signal_send()``:
 3. **Wake sleeping process** (except for SIGCONT)
 4. **Return to caller** (signal not yet delivered)
 
-.. code-block:: c
-
-   int signal_send(struct process *proc, int signum) {
-       if (!proc || signum <= 0 || signum >= NSIG) {
-           set_errno(THUNDEROS_EINVAL);
-           return -1;
-       }
-       
-       // Can't send signals to UNUSED or ZOMBIE processes
-       if (proc->state == PROC_UNUSED || proc->state == PROC_ZOMBIE) {
-           set_errno(THUNDEROS_ESRCH);
-           return -1;
-       }
-       
-       // Add signal to pending set
-       proc->pending_signals |= (1UL << signum);
-       
-       // Wake up the process if sleeping
-       if (proc->state == PROC_SLEEPING && signum != SIGCONT) {
-           process_wakeup(proc);
-       }
-       
-       clear_errno();
-       return 0;
-   }
+.. literalinclude:: ../../../kernel/core/signal.c
+   :language: c
+   :lines: 91-121
 
 Phase 2: Delivery
 ~~~~~~~~~~~~~~~~~
@@ -202,24 +138,9 @@ Signals are delivered when returning to user mode from a trap:
 
 **Delivery Function:**
 
-.. code-block:: c
-
-   void signal_deliver_with_frame(struct process *proc, struct trap_frame *tf) {
-       if (!proc || !tf) return;
-       
-       // Get unblocked pending signals
-       sigset_t deliverable = proc->pending_signals & ~proc->blocked_signals;
-       if (!deliverable) return;
-       
-       // Deliver signals in order (lowest number first)
-       for (int signum = 1; signum < NSIG; signum++) {
-           if (deliverable & (1UL << signum)) {
-               proc->pending_signals &= ~(1UL << signum);
-               signal_handle_with_frame(proc, signum, tf);
-               break;  // Only one signal per trap
-           }
-       }
-   }
+.. literalinclude:: ../../../kernel/core/signal.c
+   :language: c
+   :lines: 381-407
 
 User Handler Execution
 -----------------------
@@ -370,9 +291,9 @@ Send a signal to a process.
 
 **Prototype:**
 
-.. code-block:: c
-
-   uint64_t sys_kill(int pid, int signum);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 142
 
 **Parameters:**
 
@@ -404,9 +325,9 @@ Set a signal handler.
 
 **Prototype:**
 
-.. code-block:: c
-
-   uint64_t sys_signal(int signum, void (*handler)(int));
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 152
 
 **Parameters:**
 
@@ -443,10 +364,9 @@ Advanced signal handling (not yet implemented).
 
 **Prototype:**
 
-.. code-block:: c
-
-   uint64_t sys_sigaction(int signum, const struct sigaction *act, 
-                          struct sigaction *oldact);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 153
 
 **Current Status:** Returns ``THUNDEROS_ENOSYS`` (not implemented).
 
@@ -457,9 +377,9 @@ Return from signal handler (not yet implemented).
 
 **Prototype:**
 
-.. code-block:: c
-
-   uint64_t sys_sigreturn(void);
+.. literalinclude:: ../../../include/kernel/syscall.h
+   :language: c
+   :lines: 154
 
 **Current Status:** Returns ``THUNDEROS_ENOSYS`` (not implemented).
 

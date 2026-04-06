@@ -88,59 +88,34 @@ Data Structures
 Page Table Entry
 ~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-    typedef uint64_t pte_t;
+.. literalinclude:: ../../../include/mm/paging.h
+   :language: c
+   :lines: 52-59
 
 Simple 64-bit integer representing a PTE.
 
 Page Table
 ~~~~~~~~~~
 
-.. code-block:: c
-
-    typedef struct {
-        pte_t entries[PT_ENTRIES];  // 512 entries
-    } page_table_t;
-
 A page table contains 512 PTEs (one 4 KB page).
 
 Constants
 ~~~~~~~~~
 
-.. code-block:: c
-
-    #define PAGE_SIZE       4096      // 4 KB pages
-    #define PT_ENTRIES      512       // Entries per page table
-    
-    // PTE flags
-    #define PTE_V           0x001     // Valid
-    #define PTE_R           0x002     // Readable
-    #define PTE_W           0x004     // Writable
-    #define PTE_X           0x008     // Executable
-    #define PTE_U           0x010     // User accessible
-    #define PTE_G           0x020     // Global
-    #define PTE_A           0x040     // Accessed
-    #define PTE_D           0x080     // Dirty
-    
-    // Common permission combinations
-    #define PTE_KERNEL_DATA (PTE_R | PTE_W)
-    #define PTE_KERNEL_CODE (PTE_R | PTE_X)
-    #define PTE_USER_DATA   (PTE_R | PTE_W | PTE_U)
-    #define PTE_USER_CODE   (PTE_R | PTE_X | PTE_U)
+.. literalinclude:: ../../../include/mm/paging.h
+   :language: c
+   :lines: 17-74
 
 Virtual Memory Layout
 ~~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
+The exported layout constants currently live in the paging header:
 
-    // Kernel virtual base (higher-half kernel)
-    #define KERNEL_VIRT_BASE    0xFFFFFFFF80000000UL
-    
-    // Physical memory base (QEMU virt machine)
-    #define PHYSICAL_MEM_BASE   0x80000000
+.. literalinclude:: ../../../include/mm/paging.h
+   :language: c
+   :lines: 71-74
 
-Currently, ThunderOS uses identity mapping where ``KERNEL_VIRT_BASE == PHYSICAL_MEM_BASE``.
+At boot, ThunderOS still establishes the kernel mappings required for the current execution model before fully switching to the higher-half helpers defined in the paging interface.
 
 API Reference
 -------------

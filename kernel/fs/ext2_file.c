@@ -72,7 +72,7 @@ static uint32_t get_block_number(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t fi
             return 0;
         }
 
-        if (read_block(fs, inode->i_block[EXT2_IND_BLOCK], 
+        if (read_block(fs, inode->i_block[EXT2_IND_BLOCK],
                       indirect_buffer, fs->block_size) != 0) {
             kfree(indirect_buffer);
             /* errno already set by read_block */
@@ -110,7 +110,7 @@ static uint32_t get_block_number(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t fi
             return 0;
         }
 
-        if (read_block(fs, inode->i_block[EXT2_DIND_BLOCK], 
+        if (read_block(fs, inode->i_block[EXT2_DIND_BLOCK],
                       dindirect_buffer, fs->block_size) != 0) {
             kfree(dindirect_buffer);
             /* errno already set by read_block */
@@ -138,7 +138,7 @@ static uint32_t get_block_number(ext2_fs_t *fs, ext2_inode_t *inode, uint32_t fi
             return 0;
         }
         
-        if (read_block(fs, indirect_block_num, 
+        if (read_block(fs, indirect_block_num,
                       indirect_buffer, fs->block_size) != 0) {
             kfree(indirect_buffer);
             /* errno already set by read_block */

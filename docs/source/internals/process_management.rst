@@ -35,40 +35,14 @@ Structure Definition
 
 The PCB (``struct process``) contains all information needed to manage a process:
 
-.. code-block:: c
-
-   struct process {
-       pid_t pid;                          // Process ID
-       proc_state_t state;                 // Process state
-       char name[PROC_NAME_LEN];           // Process name (32 bytes)
-       
-       // Memory management
-       page_table_t *page_table;           // Virtual memory page table
-       uintptr_t kernel_stack;             // Kernel stack base (16KB)
-       uintptr_t user_stack;               // User stack base (1MB)
-       
-       // Saved context (for context switching)
-       struct context context;             // Kernel context
-       struct trap_frame *trap_frame;      // User context (trap frame)
-       
-       // Scheduling
-       uint64_t cpu_time;                  // Total CPU time used (in ticks)
-       uint64_t priority;                  // Scheduling priority (lower = higher)
-       
-       // Process tree
-       struct process *parent;             // Parent process
-       
-       // Terminal association (v0.7.0)
-       int controlling_tty;                // Virtual terminal index (-1 = none)
-       
-       // Exit status
-       int exit_code;                      // Exit code if state is ZOMBIE
-   };
+.. literalinclude:: ../../../include/kernel/process.h
+    :language: c
+    :lines: 95-149
 
 Controlling Terminal
 ~~~~~~~~~~~~~~~~~~~~
 
-Each process has a ``controlling_tty`` field (added in v0.7.0) that associates it with a virtual terminal:
+Each process has a ``controlling_tty`` field that associates it with a virtual terminal:
 
 - **Value 0-5**: Virtual terminal index (VT1=0 through VT6=5)
 - **Value -1**: No controlling terminal (detached process)
@@ -98,11 +72,9 @@ Each process has three separate memory regions:
 
 **Process Memory Constants:**
 
-.. code-block:: c
-
-    #define KERNEL_STACK_SIZE       (16 * 1024)     /* 16KB kernel stack */
-    #define USER_STACK_SIZE         (1024 * 1024)   /* 1MB user stack */
-    #define HEAP_STACK_SAFETY_MARGIN (1024 * 1024)  /* 1MB safety gap */
+.. literalinclude:: ../../../include/kernel/process.h
+    :language: c
+    :lines: 43-67
 
 **Safety Margin:**
 
@@ -144,16 +116,9 @@ Process States
 
 Processes transition through the following states:
 
-.. code-block:: c
-
-   typedef enum {
-       PROC_UNUSED = 0,    // Process slot is unused
-       PROC_EMBRYO,        // Process being created
-       PROC_READY,         // Ready to run
-       PROC_RUNNING,       // Currently running
-       PROC_SLEEPING,      // Waiting for event
-       PROC_ZOMBIE         // Exited but not yet cleaned up
-   } proc_state_t;
+.. literalinclude:: ../../../include/kernel/process.h
+    :language: c
+    :lines: 23-32
 
 State Transition Diagram
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -172,6 +137,8 @@ State Transitions:
 - **RUNNING → READY**: Time slice expires or ``process_yield()`` called
 - **RUNNING → SLEEPING**: ``process_sleep()`` called
 - **SLEEPING → READY**: ``process_wakeup()`` called
+- **RUNNING → STOPPED**: default stop signal action (for example ``SIGTSTP``)
+- **STOPPED → READY**: continue signal wakes the process
 - **RUNNING → ZOMBIE**: ``process_exit()`` called
 - **ZOMBIE → UNUSED**: Parent reaps zombie (TODO: not yet implemented)
 
@@ -180,24 +147,9 @@ Context Structure
 
 The context structure holds callee-saved registers per RISC-V calling convention:
 
-.. code-block:: c
-
-   struct context {
-       unsigned long ra;   // Return address
-       unsigned long sp;   // Stack pointer
-       unsigned long s0;   // Saved registers s0-s11
-       unsigned long s1;
-       unsigned long s2;
-       unsigned long s3;
-       unsigned long s4;
-       unsigned long s5;
-       unsigned long s6;
-       unsigned long s7;
-       unsigned long s8;
-       unsigned long s9;
-       unsigned long s10;
-       unsigned long s11;
-   };
+.. literalinclude:: ../../../include/kernel/process.h
+    :language: c
+    :lines: 77-93
 
 Why Only Callee-Saved Registers?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -219,10 +171,13 @@ Process Table
 
 The process table is a static array that holds all process control blocks:
 
-.. code-block:: c
+.. literalinclude:: ../../../include/kernel/process.h
+    :language: c
+    :lines: 37-41
 
-   #define MAX_PROCS 64
-   static struct process process_table[MAX_PROCS];
+.. literalinclude:: ../../../kernel/core/process.c
+    :language: c
+    :lines: 18-24
 
 Process 0 (Init Process)
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -241,16 +196,9 @@ Process ID Allocation
 
 PIDs are allocated sequentially starting from 1:
 
-.. code-block:: c
-
-   static pid_t next_pid = 1;
-   
-   pid_t alloc_pid(void) {
-       lock_acquire(&process_lock);
-       pid_t pid = next_pid++;
-       lock_release(&process_lock);
-       return pid;
-   }
+.. literalinclude:: ../../../kernel/core/process.c
+    :language: c
+    :lines: 23-24,106-111
 
 **Note**: Current implementation has no PID wraparound or recycling. After 2³¹-1 processes, PIDs will overflow (acceptable for current design).
 
@@ -258,6 +206,10 @@ Process Creation
 ----------------
 
 The ``process_create()`` function follows these steps:
+
+.. literalinclude:: ../../../kernel/core/process.c
+    :language: c
+    :lines: 269-340
 
 1. **Allocate Process Slot**
    
@@ -825,13 +777,9 @@ Current Process Tracking
 
 Global variable tracks currently running process:
 
-.. code-block:: c
-
-   static struct process *current_process = NULL;
-   
-   struct process *process_current(void) {
-       return current_process;
-   }
+.. literalinclude:: ../../../kernel/core/process.c
+    :language: c
+    :lines: 83-92
 
 This is updated by ``process_set_current()`` during context switches.
 
@@ -847,7 +795,7 @@ Current Limitations
 4. **No IPC mechanisms**: Processes cannot communicate
 5. **No signal handling**: Cannot send signals to processes
 6. **No zombie reaping**: Exited processes stay in memory
-7. **No fork/exec**: Cannot create child processes or load programs
+7. **No exec program replacement**: ``process_exec()`` still returns ``THUNDEROS_ENOSYS``
 8. **Fixed time slice**: Cannot adjust per-process scheduling quantum
 9. **No CPU affinity**: Single CPU only
 10. **No real-time support**: No deadline or priority scheduling
@@ -863,7 +811,6 @@ Future Enhancements
 
 2. **Fork and Exec**
    
-   - Implement ``process_fork()`` for process cloning
    - Implement ``process_exec()`` for program loading
    - Add ELF loader for executable files
 

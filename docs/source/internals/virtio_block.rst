@@ -18,27 +18,9 @@ The VirtIO device is accessed through memory-mapped I/O (MMIO) registers at phys
 
 **Key MMIO Registers:**
 
-.. code-block:: c
-
-    #define VIRTIO_MMIO_MAGIC_VALUE         0x000  // Should be 0x74726976
-    #define VIRTIO_MMIO_VERSION             0x004  // Device version (1 or 2)
-    #define VIRTIO_MMIO_DEVICE_ID           0x008  // Device type (2 = block)
-    #define VIRTIO_MMIO_VENDOR_ID           0x00c  // Vendor ID
-    #define VIRTIO_MMIO_DEVICE_FEATURES     0x010  // Device capability flags
-    #define VIRTIO_MMIO_QUEUE_SEL           0x030  // Select queue number
-    #define VIRTIO_MMIO_QUEUE_NUM_MAX       0x034  // Maximum queue size
-    #define VIRTIO_MMIO_QUEUE_NUM           0x038  // Current queue size
-    #define VIRTIO_MMIO_QUEUE_READY         0x044  // Queue activation status
-    #define VIRTIO_MMIO_QUEUE_NOTIFY        0x050  // Trigger device processing
-    #define VIRTIO_MMIO_INTERRUPT_STATUS    0x060  // Interrupt status flags
-    #define VIRTIO_MMIO_INTERRUPT_ACK       0x064  // Acknowledge interrupts
-    #define VIRTIO_MMIO_STATUS              0x070  // Device status
-    #define VIRTIO_MMIO_QUEUE_DESC_LOW      0x080  // Descriptor table address (low)
-    #define VIRTIO_MMIO_QUEUE_DESC_HIGH     0x084  // Descriptor table address (high)
-    #define VIRTIO_MMIO_QUEUE_AVAIL_LOW     0x090  // Available ring address (low)
-    #define VIRTIO_MMIO_QUEUE_AVAIL_HIGH    0x094  // Available ring address (high)
-    #define VIRTIO_MMIO_QUEUE_USED_LOW      0x0a0  // Used ring address (low)
-    #define VIRTIO_MMIO_QUEUE_USED_HIGH     0x0a4  // Used ring address (high)
+.. literalinclude:: ../../../include/drivers/virtio_blk.h
+    :language: c
+    :lines: 18-39
 
 Descriptor Ring Architecture
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -91,12 +73,9 @@ VirtIO Descriptor
 
 .. code-block:: c
 
-    struct virtq_desc {
-        uint64_t addr;   // Physical address of buffer
-        uint32_t len;    // Length of buffer in bytes
-        uint16_t flags;  // Flags (NEXT, WRITE, INDIRECT)
-        uint16_t next;   // Index of next descriptor in chain
-    };
+.. literalinclude:: ../../../include/drivers/virtio_blk.h
+   :language: c
+   :lines: 131-136
 
 **Flags:**
 
@@ -107,46 +86,27 @@ VirtIO Descriptor
 Available Ring
 ~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-    struct virtq_avail {
-        uint16_t flags;         // Suppress interrupts if set
-        uint16_t idx;           // Next slot to be filled
-        uint16_t ring[QUEUE_SIZE];  // Descriptor indices
-        uint16_t used_event;    // Used for event suppression
-    };
+.. literalinclude:: ../../../include/drivers/virtio_blk.h
+   :language: c
+   :lines: 142-147
 
 The driver adds descriptor indices to ``ring[idx % QUEUE_SIZE]`` and increments ``idx``.
 
 Used Ring
 ~~~~~~~~~
 
-.. code-block:: c
-
-    struct virtq_used_elem {
-        uint32_t id;   // Descriptor chain head index
-        uint32_t len;  // Bytes written to buffer
-    };
-
-    struct virtq_used {
-        uint16_t flags;
-        uint16_t idx;           // Next slot device will use
-        struct virtq_used_elem ring[QUEUE_SIZE];
-        uint16_t avail_event;
-    };
+.. literalinclude:: ../../../include/drivers/virtio_blk.h
+   :language: c
+   :lines: 153-167
 
 The device adds completed descriptors to ``ring[idx % QUEUE_SIZE]`` and increments ``idx``.
 
 VirtIO Block Request
 ~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-    struct virtio_blk_req {
-        uint32_t type;          // VIRTIO_BLK_T_IN (read) or T_OUT (write)
-        uint32_t reserved;      // Must be zero
-        uint64_t sector;        // Sector number (512-byte units)
-    };
+.. literalinclude:: ../../../include/drivers/virtio_blk.h
+   :language: c
+   :lines: 201-205
 
 **Request Types:**
 
@@ -157,11 +117,9 @@ VirtIO Block Request
 VirtIO Block Status
 ~~~~~~~~~~~~~~~~~~~~
 
-.. code-block:: c
-
-    #define VIRTIO_BLK_S_OK        0  // Success
-    #define VIRTIO_BLK_S_IOERR     1  // I/O error
-    #define VIRTIO_BLK_S_UNSUPP    2  // Unsupported operation
+.. literalinclude:: ../../../include/drivers/virtio_blk.h
+    :language: c
+    :lines: 75-77
 
 Error Handling
 ~~~~~~~~~~~~~~
@@ -215,44 +173,9 @@ Initialization Sequence
 
 The driver initialization follows the VirtIO specification's device initialization protocol:
 
-.. code-block:: c
-
-    int virtio_blk_init(void) {
-        // 1. Reset device
-        write32(VIRTIO_MMIO_STATUS, 0);
-        
-        // 2. Set ACKNOWLEDGE bit (OS recognizes device)
-        write32(VIRTIO_MMIO_STATUS, VIRTIO_STATUS_ACKNOWLEDGE);
-        
-        // 3. Set DRIVER bit (OS has driver for device)
-        uint32_t status = read32(VIRTIO_MMIO_STATUS);
-        write32(VIRTIO_MMIO_STATUS, status | VIRTIO_STATUS_DRIVER);
-        
-        // 4. Read device features
-        uint32_t features = read32(VIRTIO_MMIO_DEVICE_FEATURES);
-        
-        // 5. Write understood features (negotiate)
-        write32(VIRTIO_MMIO_DRIVER_FEATURES, 0);
-        
-        // 6. Set FEATURES_OK bit
-        status = read32(VIRTIO_MMIO_STATUS);
-        write32(VIRTIO_MMIO_STATUS, status | VIRTIO_STATUS_FEATURES_OK);
-        
-        // 7. Re-read status to verify FEATURES_OK still set
-        status = read32(VIRTIO_MMIO_STATUS);
-        if (!(status & VIRTIO_STATUS_FEATURES_OK)) {
-            return -1;  // Feature negotiation failed
-        }
-        
-        // 8. Allocate and initialize virtqueue
-        virtio_blk_setup_queue();
-        
-        // 9. Set DRIVER_OK bit (ready for operation)
-        status = read32(VIRTIO_MMIO_STATUS);
-        write32(VIRTIO_MMIO_STATUS, status | VIRTIO_STATUS_DRIVER_OK);
-        
-        return 0;
-    }
+.. literalinclude:: ../../../kernel/drivers/virtio_blk.c
+   :language: c
+   :lines: 502-614
 
 **Status Bits:**
 

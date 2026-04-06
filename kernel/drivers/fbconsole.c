@@ -225,6 +225,31 @@ static void backspace(void)
     }
 }
 
+static void put_printable_char(char c)
+{
+    /* Hide cursor before drawing */
+    if (g_fbcon.cursor_visible) {
+        draw_cursor(0);
+    }
+
+    /* Draw the character */
+    uint32_t x = g_fbcon.cursor_col * FONT_WIDTH;
+    uint32_t y = g_fbcon.cursor_row * FONT_HEIGHT;
+    font_draw_char(x, y, c, g_fbcon.fg_color, g_fbcon.bg_color);
+    g_fbcon.dirty = 1;
+
+    /* Advance cursor */
+    g_fbcon.cursor_col++;
+    if (g_fbcon.cursor_col >= g_fbcon.cols) {
+        newline();
+    }
+
+    /* Show cursor at new position */
+    if (g_fbcon.cursor_visible) {
+        draw_cursor(1);
+    }
+}
+
 /**
  * Handle tab
  */
@@ -233,7 +258,7 @@ static void tab(void)
     /* Tab to next 8-column boundary */
     uint32_t next_tab = ((g_fbcon.cursor_col / 8) + 1) * 8;
     while (g_fbcon.cursor_col < next_tab && g_fbcon.cursor_col < g_fbcon.cols) {
-        fbcon_putc(' ');
+        put_printable_char(' ');
     }
 }
 
@@ -267,27 +292,7 @@ void fbcon_putc(char c)
         return;
     }
     
-    /* Hide cursor before drawing */
-    if (g_fbcon.cursor_visible) {
-        draw_cursor(0);
-    }
-    
-    /* Draw the character */
-    uint32_t x = g_fbcon.cursor_col * FONT_WIDTH;
-    uint32_t y = g_fbcon.cursor_row * FONT_HEIGHT;
-    font_draw_char(x, y, c, g_fbcon.fg_color, g_fbcon.bg_color);
-    g_fbcon.dirty = 1;
-    
-    /* Advance cursor */
-    g_fbcon.cursor_col++;
-    if (g_fbcon.cursor_col >= g_fbcon.cols) {
-        newline();
-    }
-    
-    /* Show cursor at new position */
-    if (g_fbcon.cursor_visible) {
-        draw_cursor(1);
-    }
+    put_printable_char(c);
 }
 
 /**

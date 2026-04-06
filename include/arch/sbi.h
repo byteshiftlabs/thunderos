@@ -36,12 +36,12 @@
 
 /* SBI Return codes */
 #define SBI_SUCCESS                 0
-#define SBI_ERR_FAILED              -1
-#define SBI_ERR_NOT_SUPPORTED       -2
-#define SBI_ERR_INVALID_PARAM       -3
-#define SBI_ERR_DENIED              -4
-#define SBI_ERR_INVALID_ADDRESS     -5
-#define SBI_ERR_ALREADY_AVAILABLE   -6
+#define SBI_ERR_FAILED              (-1)
+#define SBI_ERR_NOT_SUPPORTED       (-2)
+#define SBI_ERR_INVALID_PARAM       (-3)
+#define SBI_ERR_DENIED              (-4)
+#define SBI_ERR_INVALID_ADDRESS     (-5)
+#define SBI_ERR_ALREADY_AVAILABLE   (-6)
 
 /**
  * SBI call result

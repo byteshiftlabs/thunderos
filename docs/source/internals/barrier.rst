@@ -95,11 +95,9 @@ Full Memory Barriers
    
    **Implementation:**
    
-   .. code-block:: c
-   
-      static inline void memory_barrier(void) {
-          asm volatile("fence rw, rw" ::: "memory");
-      }
+   .. literalinclude:: ../../../include/arch/barrier.h
+      :language: c
+      :lines: 22-24
    
    **Semantics:**
    
@@ -133,11 +131,9 @@ Full Memory Barriers
    
    **Implementation:**
    
-   .. code-block:: c
-   
-      static inline void io_barrier(void) {
-          asm volatile("fence rw, rw" ::: "memory");
-      }
+   .. literalinclude:: ../../../include/arch/barrier.h
+      :language: c
+      :lines: 62-64
    
    **Semantics:**
    
@@ -171,11 +167,9 @@ Directional Barriers
    
    **Implementation:**
    
-   .. code-block:: c
-   
-      static inline void write_barrier(void) {
-          asm volatile("fence w, w" ::: "memory");
-      }
+   .. literalinclude:: ../../../include/arch/barrier.h
+      :language: c
+      :lines: 36-38
    
    **Semantics:**
    
@@ -211,11 +205,9 @@ Directional Barriers
    
    **Implementation:**
    
-   .. code-block:: c
-   
-      static inline void read_barrier(void) {
-          asm volatile("fence r, r" ::: "memory");
-      }
+   .. literalinclude:: ../../../include/arch/barrier.h
+      :language: c
+      :lines: 50-52
    
    **Semantics:**
    
@@ -251,11 +243,9 @@ Data Barriers
    
    **Implementation:**
    
-   .. code-block:: c
-   
-      static inline void data_memory_barrier(void) {
-          asm volatile("fence rw, rw" ::: "memory");
-      }
+   .. literalinclude:: ../../../include/arch/barrier.h
+      :language: c
+      :lines: 74-76
    
    **Semantics:**
    

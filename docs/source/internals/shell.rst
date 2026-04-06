@@ -8,23 +8,23 @@ ThunderOS includes a user-mode interactive shell (``ush``) that runs entirely in
 Overview
 --------
 
-The user-mode shell (``ush`` v0.8.0) provides:
+The user-mode shell (``ush``) provides:
 
 - **User-space execution**: Runs as regular user processes
 - **Fork+exec model**: Launches external programs via fork and exec
 - **Built-in commands**: Directory navigation, file operations
 - **External commands**: Executes ELF binaries from filesystem
 - **Multi-terminal support**: Independent shells on virtual terminals
-- **Job control**: Background jobs, fg/bg commands, Ctrl+Z suspension (v0.8.0)
-- **Shell pipes**: Command pipelines with ``|`` operator (v0.8.0)
-- **I/O redirection**: Input/output redirection with ``<`` and ``>`` (v0.8.0)
-- **Signal handling**: Ctrl+C (SIGINT), Ctrl+Z (SIGTSTP) (v0.8.0)
-- **Command history**: Arrow key navigation through previous commands (v0.8.0)
+- **Job control**: Background jobs, fg/bg commands, Ctrl+Z suspension
+- **Shell pipes**: Command pipelines with ``|`` operator
+- **I/O redirection**: Input/output redirection with ``<`` and ``>``
+- **Signal handling**: Ctrl+C (SIGINT), Ctrl+Z (SIGTSTP)
+- **Command history**: Arrow key navigation through previous commands
 
 Multi-Terminal Support
 ----------------------
 
-As of v0.7.0, ThunderOS runs multiple shell instances on separate virtual terminals:
+ThunderOS runs multiple shell instances on separate virtual terminals:
 
 - **VT1**: Primary shell (PID 1)
 - **VT2**: Secondary shell (PID 2)
@@ -403,10 +403,10 @@ Current limitations of the shell and userland:
 3. **Limited Job Control**: Only single background job tracking per command
 4. **No Scripting**: No shell scripts or batch execution
 
-Features Implemented in v0.8.0
-------------------------------
+Interactive Features
+--------------------
 
-The following features were added in version 0.8.0:
+The current shell includes the following interactive features:
 
 **Job Control:**
 

@@ -392,6 +392,48 @@ static void vterm_newline(vterm_t *term)
     }
 }
 
+static void vterm_scroll_buffer(vterm_t *term)
+{
+    for (uint32_t row = 0; row < term->rows - 1; row++) {
+        for (uint32_t col = 0; col < term->cols; col++) {
+            term->buffer[row][col] = term->buffer[row + 1][col];
+        }
+    }
+
+    for (uint32_t col = 0; col < term->cols; col++) {
+        term->buffer[term->rows - 1][col].ch = ' ';
+        term->buffer[term->rows - 1][col].fg_color = term->fg_color;
+        term->buffer[term->rows - 1][col].bg_color = term->bg_color;
+        term->buffer[term->rows - 1][col].attrs = VTERM_ATTR_NONE;
+    }
+}
+
+static void vterm_put_printable_to(vterm_t *term, int index, char c)
+{
+    term->buffer[term->cursor_row][term->cursor_col].ch = c;
+    term->buffer[term->cursor_row][term->cursor_col].fg_color = term->fg_color;
+    term->buffer[term->cursor_row][term->cursor_col].bg_color = term->bg_color;
+    term->buffer[term->cursor_row][term->cursor_col].attrs = term->attrs;
+
+    if (index == g_active_terminal) {
+        vterm_draw_cell(term->cursor_col, term->cursor_row,
+                       &term->buffer[term->cursor_row][term->cursor_col]);
+    }
+
+    term->cursor_col++;
+    if (term->cursor_col >= term->cols) {
+        term->cursor_row++;
+        term->cursor_col = 0;
+        if (term->cursor_row >= term->rows) {
+            vterm_scroll_buffer(term);
+            term->cursor_row = term->rows - 1;
+            if (index == g_active_terminal) {
+                vterm_refresh();
+            }
+        }
+    }
+}
+
 /**
  * Write a character to the active virtual terminal
  */
@@ -439,7 +481,7 @@ void vterm_putc(char c)
     case '\t':
         /* Tab to next VTERM_TAB_WIDTH-column boundary */
         do {
-            vterm_putc(' ');
+            vterm_put_printable_to(term, g_active_terminal, ' ');
         } while (term->cursor_col % VTERM_TAB_WIDTH != 0 && term->cursor_col < term->cols);
         return;
         
@@ -455,23 +497,7 @@ void vterm_putc(char c)
         return;
     }
     
-    /* Store character in buffer */
-    term->buffer[term->cursor_row][term->cursor_col].ch = c;
-    term->buffer[term->cursor_row][term->cursor_col].fg_color = term->fg_color;
-    term->buffer[term->cursor_row][term->cursor_col].bg_color = term->bg_color;
-    term->buffer[term->cursor_row][term->cursor_col].attrs = term->attrs;
-    
-    /* Draw to screen if this is the active terminal */
-    if (term == &g_terminals[g_active_terminal]) {
-        vterm_draw_cell(term->cursor_col, term->cursor_row,
-                       &term->buffer[term->cursor_row][term->cursor_col]);
-    }
-    
-    /* Advance cursor */
-    term->cursor_col++;
-    if (term->cursor_col >= term->cols) {
-        vterm_newline(term);
-    }
+    vterm_put_printable_to(term, g_active_terminal, c);
 }
 
 /**
@@ -817,19 +843,7 @@ static void vterm_putc_internal(vterm_t *term, int index, char c)
         term->cursor_row++;
         term->cursor_col = 0;
         if (term->cursor_row >= term->rows) {
-            /* Scroll up */
-            for (uint32_t row = 0; row < term->rows - 1; row++) {
-                for (uint32_t col = 0; col < term->cols; col++) {
-                    term->buffer[row][col] = term->buffer[row + 1][col];
-                }
-            }
-            /* Clear bottom row */
-            for (uint32_t col = 0; col < term->cols; col++) {
-                term->buffer[term->rows - 1][col].ch = ' ';
-                term->buffer[term->rows - 1][col].fg_color = term->fg_color;
-                term->buffer[term->rows - 1][col].bg_color = term->bg_color;
-                term->buffer[term->rows - 1][col].attrs = VTERM_ATTR_NONE;
-            }
+            vterm_scroll_buffer(term);
             term->cursor_row = term->rows - 1;
         }
         /* Redraw if this is the active terminal */
@@ -856,7 +870,7 @@ static void vterm_putc_internal(vterm_t *term, int index, char c)
     case '\t':
         /* Tab to next VTERM_TAB_WIDTH-column boundary */
         do {
-            vterm_putc_internal(term, index, ' ');
+            vterm_put_printable_to(term, index, ' ');
         } while (term->cursor_col % VTERM_TAB_WIDTH != 0 && term->cursor_col < term->cols);
         return;
         
@@ -872,42 +886,7 @@ static void vterm_putc_internal(vterm_t *term, int index, char c)
         return;
     }
     
-    /* Store character in buffer */
-    term->buffer[term->cursor_row][term->cursor_col].ch = c;
-    term->buffer[term->cursor_row][term->cursor_col].fg_color = term->fg_color;
-    term->buffer[term->cursor_row][term->cursor_col].bg_color = term->bg_color;
-    term->buffer[term->cursor_row][term->cursor_col].attrs = term->attrs;
-    
-    /* Draw to screen if this is the active terminal */
-    if (index == g_active_terminal) {
-        vterm_draw_cell(term->cursor_col, term->cursor_row,
-                       &term->buffer[term->cursor_row][term->cursor_col]);
-    }
-    
-    /* Advance cursor */
-    term->cursor_col++;
-    if (term->cursor_col >= term->cols) {
-        term->cursor_row++;
-        term->cursor_col = 0;
-        if (term->cursor_row >= term->rows) {
-            /* Scroll */
-            for (uint32_t row = 0; row < term->rows - 1; row++) {
-                for (uint32_t col = 0; col < term->cols; col++) {
-                    term->buffer[row][col] = term->buffer[row + 1][col];
-                }
-            }
-            for (uint32_t col = 0; col < term->cols; col++) {
-                term->buffer[term->rows - 1][col].ch = ' ';
-                term->buffer[term->rows - 1][col].fg_color = term->fg_color;
-                term->buffer[term->rows - 1][col].bg_color = term->bg_color;
-                term->buffer[term->rows - 1][col].attrs = VTERM_ATTR_NONE;
-            }
-            term->cursor_row = term->rows - 1;
-            if (index == g_active_terminal) {
-                vterm_refresh();
-            }
-        }
-    }
+    vterm_put_printable_to(term, index, c);
 }
 
 /**

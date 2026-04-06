@@ -384,16 +384,18 @@ uint64_t sys_yield(void) {
  */
 uint64_t sys_getppid(void) {
     struct process *current_process = process_current();
-    
+
     if (current_process == NULL) {
+        clear_errno();
         return 0;
     }
-    
-    // Return ppid if available (currently PCB doesn't have ppid field)
-    // For now, return 0 (init process has no parent)
-    // TODO: Add ppid field to PCB structure
+
     clear_errno();
-    return 0;
+    if (current_process->parent == NULL) {
+        return 0;
+    }
+
+    return (uint64_t)current_process->parent->pid;
 }
 
 /**
@@ -641,6 +643,7 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
     if (file_descriptor == STDIN_FD) {
         // Read from input buffer or UART
         if (byte_count == 0) {
+            clear_errno();
             return 0;
         }
         
@@ -656,6 +659,7 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
                     int buffered = vterm_get_buffered_input_for(tty);
                     if (buffered >= 0) {
                         buffer[0] = (char)buffered;
+                        clear_errno();
                         return 1;
                     }
                 }
@@ -680,6 +684,7 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
                             interrupt_restore(old_state);
                             if (result != 0) {
                                 buffer[0] = result;
+                                clear_errno();
                                 return 1;
                             }
                             // Character consumed (VT switch), continue loop
@@ -700,13 +705,16 @@ uint64_t sys_read(int file_descriptor, char *buffer, size_t byte_count) {
             int buffered = vterm_get_buffered_input();
             if (buffered >= 0) {
                 buffer[0] = (char)buffered;
+                clear_errno();
                 return 1;
             }
+            clear_errno();
             return 0;
         } else {
             // No vterm - read directly from UART (fallback)
             char c = hal_uart_getc();
             buffer[0] = c;
+            clear_errno();
             return 1;
         }
     }
@@ -775,6 +783,7 @@ uint64_t sys_write(int file_descriptor, const char *buffer, size_t byte_count) {
                 return SYSCALL_ERROR;
             }
         }
+        clear_errno();
         return byte_count;
     }
     
@@ -1080,6 +1089,7 @@ uint64_t sys_pipe(int pipefd[2]) {
         return SYSCALL_ERROR;
     }
     
+    clear_errno();
     return SYSCALL_SUCCESS;
 }
 
@@ -1101,6 +1111,7 @@ uint64_t sys_dup2(int oldfd, int newfd) {
     if (result < 0) {
         return SYSCALL_ERROR;
     }
+    clear_errno();
     return result;
 }
 
@@ -1180,6 +1191,7 @@ uint64_t sys_chmod(const char *path, uint32_t mode) {
     if (result < 0) {
         return SYSCALL_ERROR;
     }
+    clear_errno();
     return 0;
 }
 
@@ -1200,6 +1212,7 @@ uint64_t sys_chown(const char *path, uint16_t uid, uint16_t gid) {
     if (result < 0) {
         return SYSCALL_ERROR;
     }
+    clear_errno();
     return 0;
 }
 
@@ -2056,6 +2069,26 @@ uint64_t sys_execve_with_frame(struct trap_frame *tf, const char *path, const ch
     return SYSCALL_ERROR;
 }
 
+uint64_t sys_poweroff(void) {
+    hal_uart_puts("\n=====================================\n");
+    hal_uart_puts("  System Poweroff Requested\n");
+    hal_uart_puts("=====================================\n");
+
+    clear_errno();
+    sbi_shutdown();
+    return 0;
+}
+
+uint64_t sys_reboot(void) {
+    hal_uart_puts("\n=====================================\n");
+    hal_uart_puts("  System Reboot Requested\n");
+    hal_uart_puts("=====================================\n");
+
+    clear_errno();
+    sbi_reboot();
+    return 0;
+}
+
 /**
  * syscall_handler - Main system call dispatcher
  * 
@@ -2362,33 +2395,13 @@ uint64_t syscall_handler(uint64_t syscall_number,
             return_value = SYSCALL_ERROR;
             break;
             
-        case SYS_POWEROFF: {
-            /* Power off the system */
-            hal_uart_puts("\n=====================================\n");
-            hal_uart_puts("  System Poweroff Requested\n");
-            hal_uart_puts("=====================================\n");
-            
-            clear_errno();  // Clear errno before non-returning operation
-            sbi_shutdown();
-            
-            /* Should not reach here */
-            return_value = 0;
+        case SYS_POWEROFF:
+            return_value = sys_poweroff();
             break;
-        }
         
-        case SYS_REBOOT: {
-            /* Reboot the system */
-            hal_uart_puts("\n=====================================\n");
-            hal_uart_puts("  System Reboot Requested\n");
-            hal_uart_puts("=====================================\n");
-            
-            clear_errno();  // Clear errno before non-returning operation
-            sbi_reboot();
-            
-            /* Should not reach here */
-            return_value = 0;
+        case SYS_REBOOT:
+            return_value = sys_reboot();
             break;
-        }
             
         default:
             hal_uart_puts("[SYSCALL] Invalid syscall number\n");
