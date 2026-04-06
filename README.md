@@ -21,7 +21,7 @@ See [CHANGELOG.md](CHANGELOG.md) for complete feature list and [ROADMAP.md](ROAD
 
 ### Cloning
 ```bash
-git clone --recurse-submodules git@github.com:byteshiftlabs/thunderos.git
+git clone --recurse-submodules https://github.com/byteshiftlabs/thunderos.git
 ```
 
 ### Building

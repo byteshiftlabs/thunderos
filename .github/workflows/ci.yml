@@ -15,28 +15,7 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
-        submodules: false
-
-    - name: Checkout private userland submodule
-      env:
-        THUNDEROS_USERLAND_SSH_KEY: ${{ secrets['THUNDEROS_USERLAND_SSH_KEY'] }}
-      run: |
-        if [ -z "$THUNDEROS_USERLAND_SSH_KEY" ]; then
-          echo "::error::Missing THUNDEROS_USERLAND_SSH_KEY secret required to fetch private external/userland submodule."
-          exit 1
-        fi
-
-        mkdir -p "$HOME/.ssh"
-        chmod 700 "$HOME/.ssh"
-        ssh-keyscan -t ed25519 github.com >> "$HOME/.ssh/known_hosts"
-        chmod 600 "$HOME/.ssh/known_hosts"
-
-        eval "$(ssh-agent -s)"
-        trap 'ssh-agent -k >/dev/null' EXIT
-        ssh-add - <<< "$THUNDEROS_USERLAND_SSH_KEY"
-
-        git submodule sync --recursive
-        git submodule update --init --recursive
+        submodules: recursive
     
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
