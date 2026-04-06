@@ -25,14 +25,22 @@ jobs:
 
       - name: Checkout private userland submodule
         env:
-          THUNDEROS_USERLAND_TOKEN: ${{ secrets['THUNDEROS_USERLAND_TOKEN'] }}
+          THUNDEROS_USERLAND_SSH_KEY: ${{ secrets['THUNDEROS_USERLAND_SSH_KEY'] }}
         run: |
-          if [ -z "$THUNDEROS_USERLAND_TOKEN" ]; then
-            echo "::error::Missing THUNDEROS_USERLAND_TOKEN secret required to fetch private external/userland submodule."
+          if [ -z "$THUNDEROS_USERLAND_SSH_KEY" ]; then
+            echo "::error::Missing THUNDEROS_USERLAND_SSH_KEY secret required to fetch private external/userland submodule."
             exit 1
           fi
 
-          git config --global url."https://x-access-token:${THUNDEROS_USERLAND_TOKEN}@github.com/".insteadOf "git@github.com:"
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+          ssh-keyscan -t ed25519 github.com >> "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          eval "$(ssh-agent -s)"
+          trap 'ssh-agent -k >/dev/null' EXIT
+          ssh-add - <<< "$THUNDEROS_USERLAND_SSH_KEY"
+
           git submodule sync --recursive
           git submodule update --init --recursive
 
