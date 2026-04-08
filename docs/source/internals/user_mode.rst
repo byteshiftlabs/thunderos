@@ -44,9 +44,8 @@ The virtual address space is divided between user and kernel:
     
     User Space (Supervisor view: 0x00000000_00000000 - 0x00000000_3FFFFFFF)
     ├─ 0x00010000: User Code Start (USER_CODE_BASE)
-    ├─ 0x00020000: User Heap Start (USER_HEAP_START)
-    ├─ 0x40000000: Memory-Mapped Region (USER_MMAP_START)
-    └─ 0x80000000: User Stack Top (USER_STACK_TOP)
+    ├─ 0x00100000: User Heap Base (USER_HEAP_BASE)
+    └─ 0x40000000: User stack top and mmap ceiling (USER_STACK_TOP / USER_MMAP_START)
     
     Kernel Space (VPN[2] = 2-511, 0x80000000+)
     ├─ 0x80200000: Kernel Code/Data
@@ -590,7 +589,7 @@ Enhance user memory:
 Related Documentation
 ---------------------
 
-- :ref:`internals-paging` - Page table implementation
-- :ref:`internals-process-management` - Process structures
-- :ref:`internals-trap-handler` - Trap handling details
-- :ref:`internals-memory-layout` - Virtual memory layout
+- :doc:`paging` - Page table implementation
+- :doc:`process_management` - Process structures
+- :doc:`trap_handler` - Trap handling details
+- :doc:`memory` - Virtual memory layout

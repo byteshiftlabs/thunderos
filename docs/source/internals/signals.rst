@@ -358,7 +358,7 @@ Set a signal handler.
    signal(SIGTERM, SIG_DFL);        // Restore default
 
 sys_sigaction (handler-only)
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Install or query a signal action. ThunderOS currently supports only the handler
 field of ``struct sigaction``. Per-handler signal masks (``sa_mask``) and flags

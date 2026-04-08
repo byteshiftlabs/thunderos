@@ -806,7 +806,7 @@ Related Documentation
 
 * :doc:`dma` - DMA allocator (uses barriers for device I/O)
 * :doc:`paging` - Virtual memory (TLB fencing)
-* :doc:`../development/device_drivers` - Writing device drivers
+* :doc:`../development` - Development workflow and driver integration
 
 See Also
 --------

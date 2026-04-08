@@ -695,14 +695,8 @@ Memory Barriers (v0.3.0)
       // Set bits 4-7 to 0b1010
       rmw32_barrier(&device->control, 0xF0, 0xA0);
    
-   :param vaddr: Virtual address to flush (0 = flush all)
-
-.. c:function:: page_table_t *get_kernel_page_table(void)
-
-   Get the kernel's root page table.
-   
-   :return: Pointer to kernel page table
-   :rtype: page_table_t*
+   See the earlier ``tlb_flush()`` entry for virtual-address-specific TLB
+   invalidation, including the ``vaddr == 0`` full-flush behavior.
 
 .. c:function:: void free_page_table(page_table_t *page_table)
 
@@ -1149,119 +1143,47 @@ Data Structures
 Trap Frame
 ~~~~~~~~~~
 
-.. c:type:: struct trap_frame
+``struct trap_frame``
+   Saved register state during trap and interrupt entry.
 
-   Saved register state during trap/interrupt.
-   
-   .. c:member:: unsigned long ra
-   
-      Return address (x1)
-   
-   .. c:member:: unsigned long sp
-   
-      Stack pointer (x2)
-   
-   .. c:member:: unsigned long gp
-   
-      Global pointer (x3)
-   
-   .. c:member:: unsigned long tp
-   
-      Thread pointer (x4)
-   
-   .. c:member:: unsigned long t0-t6
-   
-      Temporary registers (x5-x7, x28-x31)
-   
-   .. c:member:: unsigned long s0-s11
-   
-      Saved registers (x8-x9, x18-x27)
-   
-   .. c:member:: unsigned long a0-a7
-   
-      Argument/return registers (x10-x17)
-   
-   .. c:member:: unsigned long sepc
-   
-      Supervisor exception program counter
-   
-   .. c:member:: unsigned long sstatus
-   
-      Supervisor status register
+   * ``ra``: Return address (x1)
+   * ``sp``: Stack pointer (x2)
+   * ``gp``: Global pointer (x3)
+   * ``tp``: Thread pointer (x4)
+   * ``t0``-``t6``: Temporary registers (x5-x7, x28-x31)
+   * ``s0``-``s11``: Saved registers (x8-x9, x18-x27)
+   * ``a0``-``a7``: Argument and return registers (x10-x17)
+   * ``sepc``: Supervisor exception program counter
+   * ``sstatus``: Supervisor status register
 
 Process Context
 ~~~~~~~~~~~~~~~
 
-.. c:type:: struct context
+``struct context``
+   Process context saved across kernel context switches.
 
-   Process context for context switching.
-   
-   .. c:member:: unsigned long ra
-   
-      Return address
-   
-   .. c:member:: unsigned long sp
-   
-      Stack pointer
-   
-   .. c:member:: unsigned long s0-s11
-   
-      Callee-saved registers
+   * ``ra``: Return address
+   * ``sp``: Stack pointer
+   * ``s0``-``s11``: Callee-saved registers
 
 Process Control Block
 ~~~~~~~~~~~~~~~~~~~~~~
 
-.. c:type:: struct process
-
+``struct process``
    Process control block (PCB).
-   
-   .. c:member:: pid_t pid
-   
-      Process ID
-   
-   .. c:member:: proc_state_t state
-   
-      Process state
-   
-   .. c:member:: char name[PROC_NAME_LEN]
-   
-      Process name
-   
-   .. c:member:: page_table_t *page_table
-   
-      Virtual memory page table
-   
-   .. c:member:: uintptr_t kernel_stack
-   
-      Kernel stack base address
-   
-   .. c:member:: uintptr_t user_stack
-   
-      User stack base address
-   
-   .. c:member:: struct context context
-   
-      Saved kernel context
-   
-   .. c:member:: struct trap_frame *trap_frame
-   
-      Saved user context
-   
-   .. c:member:: uint64_t cpu_time
-   
-      Total CPU time used (in ticks)
-   
-   .. c:member:: uint64_t priority
-   
-      Scheduling priority
-   
-   .. c:member:: struct process *parent
-   
-      Parent process
-   
-   .. c:member:: int exit_code
-   
-      Exit status code
+
+   * ``pid``: Process ID
+   * ``state``: Current process state
+   * ``name``: Process name buffer
+   * ``page_table``: Per-process virtual memory root
+   * ``kernel_stack``: Kernel stack base address
+   * ``user_stack``: User stack base address
+   * ``context``: Saved kernel context
+   * ``trap_frame``: Saved user trap frame
+   * ``cpu_time``: Total CPU time used in ticks
+   * ``priority``: Scheduling priority
+   * ``parent``: Parent process pointer
+   * ``exit_code``: Exit status code for zombie processes
 
 Page Table
 ~~~~~~~~~~
@@ -1466,44 +1388,35 @@ User Mode API
 Memory Layout Constants
 ~~~~~~~~~~~~~~~~~~~~~~~
 
-.. c:macro:: USER_CODE_BASE
+``USER_CODE_BASE``
+   User code entry point: ``0x00010000`` (64 KB)
 
-   User code entry point: ``0x10000`` (64 KB)
+``USER_HEAP_BASE``
+   Initial per-process heap base: ``0x00100000`` (used for brk-style growth)
 
-.. c:macro:: USER_HEAP_START
+``USER_MMAP_START``
+   Upper user-space mapping search base: ``0x40000000`` (1 GB)
 
-   User heap start: ``0x20000`` (128 KB)
+``USER_STACK_TOP``
+   User stack top: ``0x40000000`` (1 GB)
 
-.. c:macro:: USER_MMAP_START
-
-   User memory-mapped region: ``0x40000000`` (1 GB)
-
-.. c:macro:: USER_STACK_TOP
-
-   User stack top: ``0x80000000`` (2 GB)
-
-.. c:macro:: USER_STACK_SIZE
-
+``USER_STACK_SIZE``
    User stack size: ``1048576`` (1 MB, grows downward)
 
 Page Table Entry Permissions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-.. c:macro:: PTE_USER_TEXT
-
+``PTE_USER_TEXT``
    User code permissions: R, X, U (readable and executable)
 
-.. c:macro:: PTE_USER_DATA
-
+``PTE_USER_DATA``
    User data permissions: R, W, U (readable and writable)
 
-.. c:macro:: PTE_USER_RO
-
+``PTE_USER_RO``
    User read-only permissions: R, U (readable only)
 
-.. c:macro:: PTE_KERNEL_DATA
-
-   Kernel data permissions: R, W, X (all access)
+``PTE_KERNEL_DATA``
+   Kernel data permissions: R, W
 
 Linker Symbols
 --------------
@@ -1549,7 +1462,7 @@ These symbols are defined by the linker script:
 Assembly Entry Points
 ---------------------
 
-.. asm:label:: _start
+``_start``
 
    Kernel entry point from bootloader.
    
