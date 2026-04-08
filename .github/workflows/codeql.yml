@@ -40,8 +40,11 @@ jobs:
       - name: Install RISC-V cross toolchain
         if: matrix.language == 'cpp'
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-riscv64-unknown-elf binutils-riscv64-unknown-elf
+          wget -q https://github.com/riscv-collab/riscv-gnu-toolchain/releases/download/2024.04.12/riscv64-elf-ubuntu-22.04-gcc-nightly-2024.04.12-nightly.tar.gz
+          sudo tar xzf riscv64-elf-ubuntu-22.04-gcc-nightly-2024.04.12-nightly.tar.gz -C /opt
+          rm riscv64-elf-ubuntu-22.04-gcc-nightly-2024.04.12-nightly.tar.gz
+          echo "/opt/riscv/bin" >> "$GITHUB_PATH"
+          /opt/riscv/bin/riscv64-unknown-elf-gcc --version
 
       - name: Build kernel for analysis
         if: matrix.language == 'cpp'
