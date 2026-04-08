@@ -223,5 +223,5 @@ See Also
 --------
 
 * :doc:`../internals/index` - ThunderOS implementation details
-* :doc:`../internals/registers` - ThunderOS-specific register usage
+* :doc:`assembly_guide` - ThunderOS-specific register usage
 * :doc:`../internals/trap_handler` - How ThunderOS handles traps

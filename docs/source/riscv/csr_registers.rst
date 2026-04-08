@@ -14,7 +14,7 @@ CSRs are special registers accessed via ``csrrw``, ``csrrs``, ``csrrc`` and thei
 Common S-mode CSRs
 ------------------
 
-See :doc:`../internals/registers` for detailed ThunderOS usage.
+See :doc:`assembly_guide` for register conventions and :doc:`../internals/trap_handler` for ThunderOS-specific CSR handling.
 
 .. list-table::
    :header-rows: 1
@@ -54,5 +54,5 @@ See :doc:`../internals/registers` for detailed ThunderOS usage.
 See Also
 --------
 
-* :doc:`../internals/registers` - Complete register reference for ThunderOS
+* :doc:`assembly_guide` - Complete register convention reference
 * :doc:`privilege_levels` - Which CSRs are accessible at each level

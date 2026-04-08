@@ -110,18 +110,18 @@ Assertion Macros
 
    * - Macro
      - Description
-    * - ``KUNIT_EXPECT_EQ(test, a, b)``
-       - Assert that ``a == b`` for the current ``struct kunit_test``
-    * - ``KUNIT_EXPECT_NE(test, a, b)``
-       - Assert that ``a != b`` for the current ``struct kunit_test``
-    * - ``KUNIT_EXPECT_TRUE(test, cond)``
-       - Assert that ``cond`` is true
-    * - ``KUNIT_EXPECT_FALSE(test, cond)``
-       - Assert that ``cond`` is false
-    * - ``KUNIT_EXPECT_NULL(test, ptr)``
-       - Assert that ``ptr == NULL``
-    * - ``KUNIT_EXPECT_NOT_NULL(test, ptr)``
-       - Assert that ``ptr != NULL``
+   * - ``KUNIT_EXPECT_EQ(test, a, b)``
+     - Assert that ``a == b`` for the current ``struct kunit_test``
+   * - ``KUNIT_EXPECT_NE(test, a, b)``
+     - Assert that ``a != b`` for the current ``struct kunit_test``
+   * - ``KUNIT_EXPECT_TRUE(test, cond)``
+     - Assert that ``cond`` is true
+   * - ``KUNIT_EXPECT_FALSE(test, cond)``
+     - Assert that ``cond`` is false
+   * - ``KUNIT_EXPECT_NULL(test, ptr)``
+     - Assert that ``ptr == NULL``
+   * - ``KUNIT_EXPECT_NOT_NULL(test, ptr)``
+     - Assert that ``ptr != NULL``
 
 Implementation
 ~~~~~~~~~~~~~~
@@ -567,5 +567,5 @@ See Also
 --------
 
 * :doc:`trap_handler` - Component tested by test_trap.c
-* :doc:`timer_clint` - Component tested by test_timer.c
-* :doc:`development` - Development workflow and testing practices
+* :doc:`hal_timer` - Component tested by timer-focused checks
+* :doc:`../development` - Development workflow and testing practices
