@@ -80,7 +80,7 @@ html_css_files = [
 # Show "Edit on GitHub" link
 html_context = {
     'display_github': True,
-    'github_user': 'cmelnu',
+    'github_user': 'byteshiftlabs',
     'github_repo': 'thunderos',
     'github_version': 'main',
     'conf_py_path': '/docs/source/',
