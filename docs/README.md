@@ -71,10 +71,10 @@ The `riscv/` directory contains practical reference material for RISC-V architec
 
 ### Prerequisites
 
-Install Sphinx and the RTD theme:
+Install the pinned documentation dependencies:
 
 ```bash
-pip install sphinx sphinx_rtd_theme
+pip install -r requirements.txt
 ```
 
 ### Build HTML Documentation
