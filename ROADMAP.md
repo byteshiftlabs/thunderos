@@ -640,7 +640,7 @@ Interested in contributing? Here's where we need help:
 - User-space utilities and programs
 - Testing on real RISC-V hardware
 
-See the [Issues](https://github.com/cmelnu/thunderos/issues) page for specific tasks.
+See the [Issues](https://github.com/byteshiftlabs/thunderos/issues) page for specific tasks.
 
 ---
 
