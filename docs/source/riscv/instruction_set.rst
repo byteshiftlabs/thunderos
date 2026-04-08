@@ -289,13 +289,13 @@ CSR Instructions
      - Description
    * - csrrw
      - ``csrrw rd, csr, rs1``
-     - Read/write CSR (rd = csr, csr = rs1)
+     - Read/write CSR (``rd = csr, csr = rs1``)
    * - csrrs
      - ``csrrs rd, csr, rs1``
-     - Read and set bits (rd = csr, csr |= rs1)
+     - Read and set bits (``rd = csr, csr |= rs1``)
    * - csrrc
      - ``csrrc rd, csr, rs1``
-     - Read and clear bits (rd = csr, csr &= ~rs1)
+     - Read and clear bits (``rd = csr, csr &= ~rs1``)
    * - csrrwi
      - ``csrrwi rd, csr, imm``
      - Read/write CSR immediate

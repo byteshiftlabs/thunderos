@@ -598,7 +598,7 @@ Related Documentation
 * :doc:`paging` - Virtual memory management
 * :doc:`pmm` - Physical memory manager
 * :doc:`barrier` - Memory barriers for device I/O
-* :doc:`../development/device_drivers` - Writing device drivers
+* :doc:`../development` - Development workflow and driver integration
 
 See Also
 --------

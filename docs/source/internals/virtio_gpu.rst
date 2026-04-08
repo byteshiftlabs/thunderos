@@ -210,8 +210,6 @@ Display Update
 .. literalinclude:: ../../../include/drivers/virtio_gpu.h
   :language: c
   :lines: 355-369
-    int virtio_gpu_flush_region(uint32_t x, uint32_t y,
-                                uint32_t width, uint32_t height);
 
 Usage Example
 -------------

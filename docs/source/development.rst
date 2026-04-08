@@ -193,19 +193,30 @@ List all QEMU debug options:
 
 **Useful options for memory debugging:**
 
-================= ====================================================
-Flag              Description
-================= ====================================================
-``-d in_asm``     Show generated assembly (TCG)
-``-d out_asm``    Show host assembly output
-``-d int``        Log interrupts and exceptions
-``-d mmu``        Log MMU-related activity (page tables, TLB)
-``-d page``       Log page allocations
-``-d guest_errors`` Log guest OS errors
-``-d unimp``      Log unimplemented device/feature access
-``-d cpu``        Log CPU state changes
-``-d exec``       Show instruction execution trace
-================= ====================================================
+.. list-table::
+   :header-rows: 1
+   :widths: 25 75
+
+   * - Flag
+     - Description
+   * - ``-d in_asm``
+     - Show generated assembly (TCG)
+   * - ``-d out_asm``
+     - Show host assembly output
+   * - ``-d int``
+     - Log interrupts and exceptions
+   * - ``-d mmu``
+     - Log MMU-related activity (page tables, TLB)
+   * - ``-d page``
+     - Log page allocations
+   * - ``-d guest_errors``
+     - Log guest OS errors
+   * - ``-d unimp``
+     - Log unimplemented device or feature access
+   * - ``-d cpu``
+     - Log CPU state changes
+   * - ``-d exec``
+     - Show instruction execution trace
 
 **Memory Access Tracing**
 

@@ -38,5 +38,5 @@ See Also
 --------
 
 * :doc:`../internals/trap_handler` - ThunderOS trap implementation
-* :doc:`../internals/timer_clint` - Timer interrupt details
+* :doc:`../internals/hal_timer` - Timer interrupt details
 * :doc:`privilege_levels` - Trap delegation

@@ -685,15 +685,13 @@ See Also
 --------
 
 * :doc:`paging` - Page table implementation
-* :doc:`pmm` - Physical memory management
-* :doc:`kmalloc` - Kernel heap allocation
-- :doc:`pmm` - Physical memory allocator
-- :doc:`kmalloc` - Kernel heap allocator
-- :doc:`dma` - DMA memory allocator
-- :doc:`process_management` - Process structures
-- :doc:`syscalls` - System call interface
-- :doc:`user_mode` - User mode execution
-- :doc:`linker_script` - Memory layout definition
+* :doc:`pmm` - Physical memory allocator
+* :doc:`kmalloc` - Kernel heap allocator
+* :doc:`dma` - DMA memory allocator
+* :doc:`process_management` - Process structures
+* :doc:`syscalls` - System call interface
+* :doc:`user_mode` - User mode execution
+* :doc:`linker_script` - Memory layout definition
 
 **Source Files:**
 
