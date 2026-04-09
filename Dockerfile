@@ -31,8 +31,9 @@ RUN apt-get update && apt-get install -y \
     gh \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies for QEMU build and documentation
-RUN pip3 install tomli sphinx sphinx_rtd_theme
+# Install pinned documentation dependencies from the repo manifest
+COPY docs/requirements.txt /tmp/docs-requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/docs-requirements.txt && rm /tmp/docs-requirements.txt
 
 # Download and install RISC-V GNU toolchain (bare-metal)
 RUN cd /tmp && \
