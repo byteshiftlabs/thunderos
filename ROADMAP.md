@@ -171,9 +171,9 @@ Initial attempt at VirtIO block driver revealed fundamental gaps in memory infra
 
 ---
 
-## Version 0.5.0 - "Communication" 🚧 IN PROGRESS
+## Version 0.5.0 - "Communication" ✅ RELEASED
 
-**Status:** In Development (started November 20, 2025)
+**Status:** Released on November 22, 2025
 
 **Focus:** Inter-process communication and process signaling
 
@@ -446,9 +446,9 @@ Initial attempt at VirtIO block driver revealed fundamental gaps in memory infra
 
 ---
 
-## Version 0.10.0 - "System Control" ✅ RELEASED
+## Version 0.10.0 - "System Control" 🚧 RELEASE PENDING
 
-**Status:** Released on February 8, 2026
+**Status:** Feature-complete on main as of February 8, 2026; public `v0.10.0` tag and GitHub Release still pending
 
 **Focus:** System shutdown and reboot functionality
 
@@ -491,6 +491,8 @@ Initial attempt at VirtIO block driver revealed fundamental gaps in memory infra
 ---
 
 ## Version 0.11.0 - "Networking"
+
+**Status:** Next planned feature milestone after `v0.10.0`
 
 **Focus:** Network connectivity
 
@@ -614,36 +616,26 @@ See `CONTRIBUTING.md` for details on how to contribute to ThunderOS development.
 
 ---
 
-
----
-
-## Development Philosophy
-
----
-
 ## How to Help
 
-Interested in contributing? Here's where we need help:
+Interested in contributing? Current priorities are:
 
-### For v0.6 (Current)
-- Relative path resolution in VFS (cd .., cd subdir)
-- Command history (up/down arrow keys)
-- Tab completion for commands and paths
-- Documentation updates for new syscalls
-- Testing on different scenarios
+### For v0.10.0 Release Prep
+- Align public version metadata across `VERSION`, `README.md`, `CHANGELOG.md`, and runtime banners
+- Publish annotated tag `v0.10.0` and matching GitHub Release
+- Verify release notes against tested functionality on `main`
+- Re-run clean build, automated tests, and docs build from the documented environment
 
-### For v0.7+ (Future)
-- Graphics drivers (VirtIO GPU, framebuffer)
-- Virtual terminal support
-- Wait queues for blocking I/O
-- Network drivers (VirtIO network)
-- User-space utilities and programs
-- Testing on real RISC-V hardware
+### For v0.11.0 - "Networking"
+- Implement VirtIO-net driver support
+- Integrate lwIP and define the socket API surface
+- Add basic networking utilities and DHCP support
+- Expand network-focused automated coverage and documentation
 
 See the [Issues](https://github.com/byteshiftlabs/thunderos/issues) page for specific tasks.
 
 ---
 
-**Last Updated:** February 2026
+**Last Updated:** April 2026
 
 For detailed technical documentation, see [docs/](docs/) directory.
