@@ -1600,8 +1600,8 @@ uint64_t sys_uname(utsname_t *buf) {
     
     COPY_STR(buf->sysname, "ThunderOS");
     COPY_STR(buf->nodename, "thunderos");
-    COPY_STR(buf->release, "0.9.0");
-    COPY_STR(buf->version, "v0.9.0 Synchronization");
+    COPY_STR(buf->release, "0.10.0");
+    COPY_STR(buf->version, "v0.10.0 System Control");
     COPY_STR(buf->machine, "riscv64");
     
     #undef COPY_STR

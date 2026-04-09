@@ -41,9 +41,9 @@ Run in QEMU::
 Current Status
 --------------
 
-**Version 0.9.0 - "Synchronization"** ✅ RELEASED
+**Version 0.10.0 - "System Control"** ✅ RELEASED
 
-ThunderOS v0.9.0 includes blocking I/O, synchronization primitives, and 62 system calls!
+ThunderOS v0.10.0 adds graceful shutdown and reboot support while preserving the filesystem, shell, process, and synchronization capabilities from earlier releases.
 
 .. list-table::
    :header-rows: 1

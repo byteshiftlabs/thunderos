@@ -1,7 +1,7 @@
 API Reference
 =============
 
-This document describes the public APIs available in ThunderOS v0.9.0.
+This document describes the public APIs available in ThunderOS v0.10.0.
 
 Hardware Abstraction Layer (HAL)
 ---------------------------------
