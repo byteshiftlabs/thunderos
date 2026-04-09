@@ -8,7 +8,7 @@ System calls (syscalls) provide the interface between user-space programs and th
 
 **Current Status:**
 
-ThunderOS v0.9.0 exposes the syscall ABI defined in ``include/kernel/syscall.h``. The current surface covers process management, I/O, filesystem operations, signals, memory management, inter-process communication, synchronization primitives, networking, terminal control, file descriptor manipulation, file permissions, and system control.
+ThunderOS v0.10.0 exposes the syscall ABI defined in ``include/kernel/syscall.h``. The current surface covers process management, I/O, filesystem operations, signals, memory management, inter-process communication, synchronization primitives, networking, terminal control, file descriptor manipulation, file permissions, and system control.
 
 **Key Features:**
 

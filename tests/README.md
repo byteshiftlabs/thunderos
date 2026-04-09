@@ -1,6 +1,6 @@
 # ThunderOS Test Suite
 
-Automated test suite for ThunderOS v0.9.0+
+Automated test suite for ThunderOS v0.10.0+
 
 ## Directory Structure
 

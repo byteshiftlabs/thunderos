@@ -5,6 +5,39 @@ All notable changes to ThunderOS will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 09/04/2026 - "System Control"
+
+### Overview
+System control release adding graceful shutdown and reboot support from user space, along with the release hardening, documentation cleanup, and security automation needed for the public ThunderOS release.
+
+### Added
+
+#### System Control (`kernel/core/syscall.c`, `kernel/arch/riscv64/core/sbi.c`, `external/userland/bin/poweroff.c`, `external/userland/bin/reboot.c`)
+- `sys_poweroff()` and `sys_reboot()` system calls
+- `poweroff` and `reboot` userland utilities
+- SBI SRST support with legacy and QEMU test-device fallbacks
+- Reliable shutdown and reboot paths for the supported QEMU environment
+
+#### Release Security and Automation
+- `SECURITY.md` vulnerability disclosure policy
+- CodeQL code scanning workflow
+- Dependency review workflow
+- Pinned documentation dependency manifest for reproducible Sphinx builds
+
+### Changed
+- Canonical version metadata updated to `0.10.0` across release-facing docs and runtime banners
+- ROADMAP now identifies `v0.10.0` as the released system-control milestone and `v0.11.0` as the next feature milestone
+- Docker documentation dependency installation now consumes `docs/requirements.txt`
+
+### Fixed
+- Clean Sphinx build on the current documentation set
+- Release-facing GitHub owner links across documentation
+- CodeQL toolchain setup for the hosted RISC-V analysis environment
+
+### Verification
+- `make clean && make -j2 && make test`
+- `make -C docs clean html SPHINXOPTS='-W --keep-going'`
+
 ## [0.9.0] - 04/12/2025 - "Synchronization"
 
 ### Overview
@@ -565,7 +598,7 @@ Fifth release of ThunderOS. Implements inter-process communication through signa
 ### Known Limitations
 - **Pipe Blocking**: Pipes are non-blocking (return EAGAIN when empty/full)
   - Proper blocking I/O requires wait queue implementation
-  - Deferred to v0.10.0 "Synchronization" release
+  - Deferred to v0.9.0 "Synchronization" release
 - **File Descriptor Inheritance**: Child processes don't inherit parent's FDs
 - **Signal Handling**: No signal handler inheritance in child processes
 

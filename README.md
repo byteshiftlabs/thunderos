@@ -4,16 +4,13 @@ A lightweight RISC-V operating system for educational use, providing a clean fou
 
 ## Current Status
 
-**Version 0.9.0 - "Synchronization"** 🎯 Released!
+**Version 0.10.0 - "System Control"** 🎯 Released!
 
-- ✅ **v0.9.0 Released** - Blocking I/O and synchronization primitives
-- ✅ Wait queues for sleep/wakeup on blocking operations
-- ✅ Mutexes and semaphores with blocking support
-- ✅ Condition variables (wait/signal/broadcast)
-- ✅ Reader-writer locks with writer priority
-- ✅ Blocking pipes (readers sleep when empty, writers when full)
-- ✅ 62 system calls implemented
-- 🚧 **Next**: VirtIO-net driver, TCP/IP stack (v0.10.0 Networking)
+- ✅ **v0.10.0 Released** - Graceful shutdown and reboot from user space
+- ✅ `poweroff` and `reboot` utilities available in userland
+- ✅ SBI SRST support with legacy and QEMU test-device fallbacks
+- ✅ Prior process, filesystem, shell, and synchronization features remain available
+- 🚧 **Next**: VirtIO-net driver, TCP/IP stack (v0.11.0 Networking)
 
 See [CHANGELOG.md](CHANGELOG.md) for complete feature list and [ROADMAP.md](ROADMAP.md) for future plans.
 
@@ -154,7 +151,7 @@ Programs are compiled as RISC-V ELF64 executables and can be loaded from the ext
 
 - RISC-V GNU Toolchain (`riscv64-unknown-elf-gcc`)
 - QEMU 10.1.2+ RISC-V System Emulator (`qemu-system-riscv64`)
-  - OpenSBI 1.5.1+ with SSTC extension support
+  - ThunderOS uses `-bios none` on the supported QEMU path, so no OpenSBI runtime is required
   - ACLINT timer device
 - Make
 - Standard Unix utilities (bash, sed, etc.)

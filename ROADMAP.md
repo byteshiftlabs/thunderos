@@ -446,9 +446,9 @@ Initial attempt at VirtIO block driver revealed fundamental gaps in memory infra
 
 ---
 
-## Version 0.10.0 - "System Control" 🚧 RELEASE PENDING
+## Version 0.10.0 - "System Control" ✅ RELEASED
 
-**Status:** Feature-complete on main as of February 8, 2026; public `v0.10.0` tag and GitHub Release still pending
+**Status:** Released on April 9, 2026
 
 **Focus:** System shutdown and reboot functionality
 
@@ -620,17 +620,16 @@ See `CONTRIBUTING.md` for details on how to contribute to ThunderOS development.
 
 Interested in contributing? Current priorities are:
 
-### For v0.10.0 Release Prep
-- Align public version metadata across `VERSION`, `README.md`, `CHANGELOG.md`, and runtime banners
-- Publish annotated tag `v0.10.0` and matching GitHub Release
-- Verify release notes against tested functionality on `main`
-- Re-run clean build, automated tests, and docs build from the documented environment
-
 ### For v0.11.0 - "Networking"
 - Implement VirtIO-net driver support
 - Integrate lwIP and define the socket API surface
 - Add basic networking utilities and DHCP support
 - Expand network-focused automated coverage and documentation
+
+### Release Maintenance
+- Keep `README.md`, `CHANGELOG.md`, and `ROADMAP.md` aligned with published releases
+- Expand automated coverage as new userland utilities and drivers land
+- Test supported QEMU workflows regularly and widen real-hardware validation over time
 
 See the [Issues](https://github.com/byteshiftlabs/thunderos/issues) page for specific tasks.
 
