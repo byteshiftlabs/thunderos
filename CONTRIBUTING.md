@@ -15,8 +15,9 @@ Thank you for your interest in contributing to ThunderOS! This guide will help y
 
 3. **Set up your environment**
    - Follow setup instructions in [docs/source/development.rst](docs/source/development.rst)
-   - Install RISC-V toolchain and QEMU
-   - Build and test: `make && make qemu`
+   - Initialize submodules: `git submodule update --init --recursive`
+   - Run the authoritative verification path first: `make docker-verify`
+   - Use native `make`, `make qemu`, and `make debug` only after the Docker path is understood
 
 ## How to Contribute
 
@@ -64,7 +65,14 @@ Thank you for your interest in contributing to ThunderOS! This guide will help y
    - Target the current `dev/vX.Y.Z` branch
    - Write a clear PR description
    - Reference related issues
+   - Include the verification command you ran (`make docker-verify`, or explain why a narrower check was necessary)
    - Wait for review
+
+### Working With The Userland Submodule
+
+- `external/userland/` is versioned by the submodule commit recorded in this repository.
+- If your change requires userland work, commit and push the `thunderos-userland` change first, then update the submodule pointer here intentionally.
+- Before opening a PR that touches the submodule pointer, verify with `make docker-verify` from the ThunderOS root.
 
 ## AI Usage Policy
 
