@@ -625,7 +625,7 @@ Inline function for physical-to-virtual translation:
 * Inline function (zero overhead)
 * Will be updated when kernel moves to higher-half mapping
 
-**Future (v0.4.0+):** When kernel uses higher-half mapping (virtual base 0xFFFFFFFF80000000):
+**Future:** When kernel uses higher-half mapping (virtual base 0xFFFFFFFF80000000):
 
 .. code-block:: c
 

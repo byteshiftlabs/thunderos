@@ -433,7 +433,7 @@ Modern systems sometimes use a third segment (R only) for ``.rodata``, but for T
 .. code-block:: c
 
    // These all end up in .rodata:
-   const char *kernel_version = "ThunderOS v0.1.0";
+   const char *kernel_version = "ThunderOS v0.10.0";
    const int MAX_OPEN_FILES = 256;
    const uint32_t magic_numbers[] = {0xDEADBEEF, 0xCAFEBABE};
 
