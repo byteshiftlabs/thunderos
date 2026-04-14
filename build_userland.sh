@@ -90,7 +90,11 @@ mkdir -p "${GENERATED_DIR}"
 # Generate version header from the kernel VERSION file so userland
 # binaries always report the same version as the kernel they ship with.
 kernel_version="$(tr -d '\n' < "${REPO_ROOT}/VERSION")"
-kernel_codename="$(tr -d '\n' < "${REPO_ROOT}/VERSION_CODENAME" 2>/dev/null || echo 'ThunderOS')"
+if [[ -f "${REPO_ROOT}/VERSION_CODENAME" ]]; then
+    kernel_codename="$(tr -d '\n' < "${REPO_ROOT}/VERSION_CODENAME")"
+else
+    kernel_codename="ThunderOS"
+fi
 cat > "${GENERATED_DIR}/thunderos_version.h" <<VEOF
 #ifndef THUNDEROS_VERSION_METADATA_H
 #define THUNDEROS_VERSION_METADATA_H
