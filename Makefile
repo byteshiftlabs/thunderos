@@ -118,7 +118,7 @@ DOCKER_USER ?= $(shell id -u):$(shell id -g)
 FS_IMG := $(BUILD_DIR)/fs.img
 FS_SIZE := 10M
 
-.PHONY: all clean run debug fs userland test test-quick help docker-build-env docker-verify docker-shell
+.PHONY: all clean run debug fs userland check-abi-version test test-quick help docker-build-env docker-verify docker-shell
 
 # Default target - must be first
 all: $(KERNEL_ELF) $(KERNEL_BIN)
@@ -292,8 +292,21 @@ userland:
 	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
 	@chmod +x build_userland.sh
 	@./build_userland.sh
+	@$(MAKE) --no-print-directory check-abi-version
 	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
 	@echo ""
+
+check-abi-version:
+	@kernel_ver=$$(tr -d '\n' < VERSION); \
+	userland_ver=$$(sed -n 's/^#define THUNDEROS_VERSION_STRING "\(.*\)"/\1/p' external/userland/build/generated/thunderos_version.h 2>/dev/null || echo 'MISSING'); \
+	if [ "$$kernel_ver" != "$$userland_ver" ]; then \
+		echo "$(RED)✗ ABI version mismatch:$(RESET) kernel=$$kernel_ver userland=$$userland_ver"; \
+		echo "  The userland was built against a different kernel version."; \
+		echo "  Run 'make userland' to rebuild with the current kernel version."; \
+		exit 1; \
+	else \
+		echo "$(GREEN)✓ ABI version match:$(RESET) kernel=$$kernel_ver userland=$$userland_ver"; \
+	fi
 
 test:
 	@cd tests/scripts && bash test_runner.sh
