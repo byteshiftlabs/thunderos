@@ -12,6 +12,10 @@
 
 /* Timer frequency TIMER_FREQ_HZ and MICROSECONDS_PER_SECOND from constants.h */
 
+#define CSR_STIMECMP 0x14D
+#define CSR_STRINGIFY_IMPL(value) #value
+#define CSR_STRINGIFY(value) CSR_STRINGIFY_IMPL(value)
+
 static volatile unsigned long ticks = 0;
 static unsigned long timer_interval_us = 0;
 
@@ -22,7 +26,7 @@ static inline unsigned long read_time(void) {
 }
 
 static inline void write_stimecmp(unsigned long value) {
-    asm volatile("csrw 0x14D, %0" :: "r"(value));
+    asm volatile("csrw " CSR_STRINGIFY(CSR_STIMECMP) ", %0" :: "r"(value));
 }
 
 void hal_timer_init(unsigned long interval_us) {

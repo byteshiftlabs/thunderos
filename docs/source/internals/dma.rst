@@ -65,7 +65,7 @@ In ThunderOS v0.3.0, the kernel uses identity mapping where virtual addresses eq
    :language: c
    :lines: 50-64
 
-**Future Enhancement (v0.4.0+):**
+**Future Enhancement:**
 
 When the kernel moves to higher-half mapping (virtual base at 0xFFFFFFFF80000000), the DMA allocator will need to:
 
