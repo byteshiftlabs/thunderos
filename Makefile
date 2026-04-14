@@ -111,12 +111,14 @@ QEMU_FLAGS := -machine virt -m 128M -nographic -serial mon:stdio
 QEMU_FLAGS += -bios none
 QEMU_FLAGS += $(QEMU_ACCEL_FLAGS)
 QEMU_FLAGS += $(QEMU_EXTRA_FLAGS)
+DOCKER_IMAGE ?= thunderos-build:local
+DOCKER_USER ?= $(shell id -u):$(shell id -g)
 
 # Filesystem image
 FS_IMG := $(BUILD_DIR)/fs.img
 FS_SIZE := 10M
 
-.PHONY: all clean run debug fs userland test test-quick help
+.PHONY: all clean run debug fs userland test test-quick help docker-build-env docker-verify docker-shell
 
 # Default target - must be first
 all: $(KERNEL_ELF) $(KERNEL_BIN)
@@ -145,6 +147,9 @@ help:
 	@echo "  $(GREEN)make clean$(RESET)        Remove all build artifacts"
 	@echo "  $(GREEN)make userland$(RESET)     Build userland programs only"
 	@echo "  $(GREEN)make fs$(RESET)           Build ext2 filesystem image"
+	@echo "  $(GREEN)make docker-build-env$(RESET) Build the authoritative Docker toolchain image"
+	@echo "  $(GREEN)make docker-verify$(RESET)    Run clean build + test inside the Docker image"
+	@echo "  $(GREEN)make docker-shell$(RESET)     Open an interactive shell inside the Docker image"
 	@echo ""
 	@echo "$(BOLD)Run Targets:$(RESET)"
 	@echo "  $(GREEN)make run$(RESET)          Build and run in QEMU (text mode)"
@@ -295,6 +300,37 @@ test:
 
 test-quick:
 	@cd tests/scripts && bash test_runner.sh --quick
+
+docker-build-env:
+	@echo ""
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(BOLD)$(BLUE)  Building ThunderOS Docker Environment$(RESET)"
+	@echo "$(BOLD)$(BLUE)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@docker build -t $(DOCKER_IMAGE) .
+	@echo "$(GREEN)✓ Docker image ready:$(RESET) $(DOCKER_IMAGE)"
+	@echo ""
+
+docker-verify: docker-build-env
+	@echo ""
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@echo "$(BOLD)$(GREEN)  Running Authoritative Docker Verification$(RESET)"
+	@echo "$(BOLD)$(GREEN)━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━$(RESET)"
+	@docker run --rm \
+		--user $(DOCKER_USER) \
+		-e HOME=/tmp/thunderos-home \
+		-v $(CURDIR):/workspace \
+		-w /workspace \
+		$(DOCKER_IMAGE) \
+		bash -lc "make clean && make && make test"
+
+docker-shell: docker-build-env
+	@docker run --rm -it \
+		--user $(DOCKER_USER) \
+		-e HOME=/tmp/thunderos-home \
+		-v $(CURDIR):/workspace \
+		-w /workspace \
+		$(DOCKER_IMAGE) \
+		bash
 
 qemu: userland fs
 	@rm -f $(BUILD_DIR)/kernel/main.o

@@ -8,41 +8,38 @@ Building
 Prerequisites
 ~~~~~~~~~~~~~
 
-**Option 1: Using Docker (Recommended)**
+**Option 1: Using Docker (Authoritative Verification Path)**
 
-The easiest way to build ThunderOS is using Docker, which provides a consistent build environment:
-
-.. code-block:: bash
-
-   # Build the Docker image
-   docker build -t thunderos-build .
-   
-   # Build ThunderOS in Docker
-   docker run --rm -v $(pwd):/workspace -w /workspace thunderos-build make all
-   
-   # Run in QEMU via Docker
-   docker run --rm -v $(pwd):/workspace -w /workspace thunderos-build make qemu
-
-**Option 2: Native Installation (Ubuntu/Debian)**
+The repository Dockerfile is the authoritative release-verification environment. It provides the pinned RISC-V bare-metal toolchain, QEMU 10.1.2, and the documentation dependencies used by CI.
 
 .. code-block:: bash
 
-   # QEMU (for emulation)
-   sudo apt-get install qemu-system-misc
-   
-   # Build tools
-   sudo apt-get install build-essential make wget
-   
-   # RISC-V toolchain (manual installation required)
-   # Download from SiFive or build from source
-   wget https://static.dev.sifive.com/dev-tools/freedom-tools/v2020.12/riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14.tar.gz
-   tar -xzf riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14.tar.gz
-   sudo mv riscv64-unknown-elf-toolchain-10.2.0-2020.12.8-x86_64-linux-ubuntu14 /opt/riscv
-   export PATH="/opt/riscv/bin:$PATH"  # Add to ~/.bashrc
-   
-   # Verify installation
+   make docker-verify
+
+For an interactive shell inside that same environment:
+
+.. code-block:: bash
+
+   make docker-shell
+
+**Option 2: Native Linux Convenience Path**
+
+Native builds are intended for day-to-day development once you already have a matching toolchain installed. If native behavior disagrees with Docker, treat Docker as authoritative.
+
+.. code-block:: bash
+
+   git submodule update --init --recursive
    riscv64-unknown-elf-gcc --version
    qemu-system-riscv64 --version
+   make clean && make
+   make test
+
+The native path requires:
+
+- ``riscv64-unknown-elf-gcc`` on ``PATH``
+- ``qemu-system-riscv64`` 10.1.2 or newer
+- ``mkfs.ext2`` from ``e2fsprogs``
+- standard Unix build tools (``make``, ``bash``, ``sed``)
 
 **Option 3: Using Build Scripts (After Setup)**
 
@@ -58,7 +55,7 @@ Once prerequisites are installed:
 Compilation
 ~~~~~~~~~~~
 
-**Using Build Scripts (Recommended)**
+**Using Build Scripts (Native Convenience Path)**
 
 .. code-block:: bash
 
@@ -81,6 +78,9 @@ Compilation
    
    # Debug with GDB
    make debug
+
+   # Authoritative Docker verification
+   make docker-verify
 
 Testing
 -------
@@ -129,10 +129,8 @@ To run similar tests locally:
 
 .. code-block:: bash
 
-   # Build and test (mimics CI)
-   docker build -t thunderos-build .
-   docker run --rm -v $(pwd):/workspace -w /workspace thunderos-build make clean && make
-   docker run --rm -v $(pwd):/workspace -w /workspace thunderos-build make test
+   # Build and test through the same Docker image used for release verification
+   make docker-verify
 
 
 Debugging

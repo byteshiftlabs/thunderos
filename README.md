@@ -19,7 +19,16 @@ See [CHANGELOG.md](CHANGELOG.md) for complete feature list and [ROADMAP.md](ROAD
 ### Cloning
 ```bash
 git clone --recurse-submodules https://github.com/byteshiftlabs/thunderos.git
+cd thunderos
+git submodule update --init --recursive
 ```
+
+### Authoritative Verification
+```bash
+make docker-verify
+```
+
+This is the release-grade setup path. It builds the repository Docker image, uses the pinned RISC-V toolchain and QEMU 10.1.2 from that image, and runs `make clean && make && make test` inside the container.
 
 ### Building
 ```bash
@@ -36,7 +45,7 @@ make OPT_LEVEL=-O2 DEBUG_SYMBOLS=1
 make qemu
 ```
 
-The OS will automatically build the filesystem image and start QEMU with VirtIO block device support.
+The OS will automatically build the filesystem image and start QEMU with VirtIO block device support. Native QEMU runs are a convenience path for local iteration; if your host toolchain or QEMU version differs from the Docker environment, use `make docker-verify` before treating the result as release-quality.
 
 For smoother local runs, you can override QEMU acceleration and extra flags:
 ```bash
@@ -63,6 +72,27 @@ make debug
 riscv64-unknown-elf-gdb build/thunderos.elf
 (gdb) target remote :1234
 ```
+
+If your host toolchain does not match the Docker-verified environment, open the authoritative shell first and debug from there:
+
+```bash
+make docker-shell
+```
+
+## Setup Contract
+
+ThunderOS has two supported public setup paths:
+
+1. `make docker-verify`
+  This is the authoritative verification path used to mirror release gating. It relies on the repository Dockerfile, which pins the RISC-V bare-metal toolchain and QEMU 10.1.2.
+2. `make`, `make qemu`, `make debug`
+  This is the native Linux convenience path for day-to-day development when you already have a matching toolchain, `mkfs.ext2`, and QEMU 10.1.2+ on the host.
+
+If the native host path disagrees with Docker, Docker wins.
+
+## Versioning And Userland
+
+`external/userland/` is pinned by git submodule commit, not by a floating branch. Releases are expected to update that submodule intentionally, keep `git submodule status` clean, and pass `make docker-verify` before publishing. That is the contract that keeps kernel and userland changes versioned together.
 
 ## Documentation
 
@@ -145,7 +175,10 @@ Programs are compiled as RISC-V ELF64 executables and can be loaded from the ext
 
 ## Platform Support
 
-- **QEMU virt machine**: Tested and working ✓
+- **Runtime target**: QEMU `virt` machine with 128 MiB RAM, `-bios none`, and VirtIO block storage
+- **Authoritative verification environment**: Repository Dockerfile with the pinned RISC-V toolchain and QEMU 10.1.2
+- **Native host development**: Supported as a convenience path when the host matches the documented toolchain requirements
+- **Real hardware**: Not a supported public target yet; bring-up work should be treated as experimental until documented otherwise
 
 ## Requirements
 
