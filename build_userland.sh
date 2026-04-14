@@ -10,8 +10,10 @@ readonly OBJCOPY="${CROSS_COMPILE}objcopy"
 
 readonly USERLAND_DIR="$(cd "$(dirname "$0")" && pwd)/external/userland"
 readonly BUILD_DIR="${USERLAND_DIR}/build"
+readonly REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
+readonly GENERATED_DIR="${USERLAND_DIR}/build/generated"
 
-readonly CFLAGS="-march=rv64gc -mabi=lp64d -nostdlib -nostartfiles -ffreestanding -fno-common -O0 -g -Wall"
+readonly CFLAGS="-march=rv64gc -mabi=lp64d -nostdlib -nostartfiles -ffreestanding -fno-common -O0 -g -Wall -I${GENERATED_DIR}"
 readonly LDFLAGS="-nostdlib -static"
 readonly LDSCRIPT="${USERLAND_DIR}/lib/user.ld"
 
@@ -83,6 +85,28 @@ build_program() {
 
 # Create build directory
 mkdir -p "${BUILD_DIR}"
+mkdir -p "${GENERATED_DIR}"
+
+# Generate version header from the kernel VERSION file so userland
+# binaries always report the same version as the kernel they ship with.
+kernel_version="$(tr -d '\n' < "${REPO_ROOT}/VERSION")"
+if [[ -f "${REPO_ROOT}/VERSION_CODENAME" ]]; then
+    kernel_codename="$(tr -d '\n' < "${REPO_ROOT}/VERSION_CODENAME")"
+else
+    kernel_codename="ThunderOS"
+fi
+cat > "${GENERATED_DIR}/thunderos_version.h" <<VEOF
+#ifndef THUNDEROS_VERSION_METADATA_H
+#define THUNDEROS_VERSION_METADATA_H
+
+#define THUNDEROS_VERSION_STRING "${kernel_version}"
+#define THUNDEROS_VERSION_TAG "v${kernel_version}"
+#define THUNDEROS_VERSION_CODENAME "${kernel_codename}"
+#define THUNDEROS_RELEASE_LABEL "v${kernel_version} ${kernel_codename}"
+
+#endif
+VEOF
+echo -e "${GREEN}✓${NC} Version header: v${kernel_version} (${kernel_codename})"
 
 print_header
 
