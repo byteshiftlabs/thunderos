@@ -79,6 +79,15 @@ If your host toolchain does not match the Docker-verified environment, open the 
 make docker-shell
 ```
 
+## Beginner Ramp-Up
+
+If you are new to ThunderOS, use this order:
+
+1. Run `make docker-verify` first so you start from the same release-grade path used for public verification.
+2. Use `make qemu` only after the Docker path passes, so host-specific differences do not confuse the first run.
+3. Read [ROADMAP.md](ROADMAP.md) and `docs/source/development.rst` before making subsystem changes.
+4. Treat `external/userland/` as a separate concern from kernel work unless your change explicitly crosses that boundary.
+
 ## Setup Contract
 
 ThunderOS has two supported public setup paths:
